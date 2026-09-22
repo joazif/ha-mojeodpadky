@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
+# Nikdy do repa: uložené stránky z přihlášeného účtu
+*.local.html
+config/
+
+# Interní poznámky k předání, do repa nepatří
+HANDOFF.md

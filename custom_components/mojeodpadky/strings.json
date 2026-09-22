@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Přihlášení na mojeodpadky.cz",
+        "description": "Zadejte stejné údaje, kterými se hlásíte na webu. Obec si integrace zjistí sama.",
+        "data": {
+          "username": "Přihlašovací jméno",
+          "password": "Heslo"
+        }
+      },
+      "schedules": {
+        "title": "Výběr harmonogramů",
+        "description": "Obec: {obec}\n\nZaškrtnuté harmonogramy bude integrace sledovat na webu za vás. Odškrtnutí harmonogram na webu odhlásí.",
+        "data": {
+          "schedules": "Harmonogramy",
+          "scan_interval_hours": "Jak často stahovat data"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nepodařilo se spojit se serverem.",
+      "invalid_auth": "Neplatné přihlašovací jméno nebo heslo.",
+      "slug_not_found": "Přihlášení prošlo, ale nepodařilo se zjistit, ke které obci účet patří. Nahlaste to prosím na GitHubu."
+    },
+    "abort": {
+      "already_configured": "Tento účet už je nastavený."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Výběr harmonogramů",
+        "description": "Zaškrtnuté harmonogramy bude integrace sledovat na webu za vás. Odškrtnutí harmonogram na webu odhlásí.",
+        "data": {
+          "schedules": "Harmonogramy",
+          "scan_interval_hours": "Jak často stahovat data"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "next_collection": {
+        "name": "Příští svoz"
+      },
+      "last_collected": {
+        "name": "Poslední odevzdání"
+      },
+      "last_update": {
+        "name": "Poslední úspěšná aktualizace"
+      },
+      "fee": {
+        "name": "Předpokládaný poplatek"
+      },
+      "score_points": {
+        "name": "EKO body"
+      },
+      "score_usage": {
+        "name": "Využití systému"
+      },
+      "volume_person": {
+        "name": "Objem na osobu"
+      },
+      "people": {
+        "name": "Osob na stanovišti"
+      },
+      "fee_rate": {
+        "name": "Sazba poplatku"
+      },
+      "fee_discount": {
+        "name": "Úleva MESOH"
+      },
+      "fee_discount_percent": {
+        "name": "Úleva v procentech"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Aktualizovat"
+      }
+    }
+  }
+}

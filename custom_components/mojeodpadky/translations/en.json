@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to mojeodpadky.cz",
+        "description": "Use the same credentials as on the website. The integration finds your municipality itself.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "schedules": {
+        "title": "Choose schedules",
+        "description": "Municipality: {obec}\n\nSelected schedules will be followed on the website for you. Unchecking one unsubscribes it.",
+        "data": {
+          "schedules": "Schedules",
+          "scan_interval_hours": "How often to refresh data"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the server.",
+      "invalid_auth": "Invalid username or password.",
+      "slug_not_found": "Signed in, but the account's municipality could not be determined. Please report it on GitHub."
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Select schedules",
+        "description": "Selected schedules will be followed on the website for you. Unchecking one unsubscribes it.",
+        "data": {
+          "schedules": "Schedules",
+          "scan_interval_hours": "How often to refresh data"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "next_collection": {
+        "name": "Next collection"
+      },
+      "last_collected": {
+        "name": "Last drop-off"
+      },
+      "last_update": {
+        "name": "Last successful update"
+      },
+      "fee": {
+        "name": "Estimated fee"
+      },
+      "score_points": {
+        "name": "Eco points"
+      },
+      "score_usage": {
+        "name": "System usage"
+      },
+      "volume_person": {
+        "name": "Volume per person"
+      },
+      "people": {
+        "name": "People at the site"
+      },
+      "fee_rate": {
+        "name": "Fee rate"
+      },
+      "fee_discount": {
+        "name": "MESOH discount"
+      },
+      "fee_discount_percent": {
+        "name": "Discount percentage"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      }
+    }
+  }
+}
