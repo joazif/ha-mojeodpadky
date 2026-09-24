@@ -330,6 +330,9 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # "51 ×" - kolikrát; sedí i na odevzdání na sběrném dvoře, kde o svoz
+    # nejde, a na rozdíl od slova se nemusí skloňovat.
+    _attr_native_unit_of_measurement = "×"
 
     def __init__(
         self, coordinator: MojeOdpadkyCoordinator, entry_id: str, komodita: str
@@ -341,7 +344,7 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        """„26 – Plast odevzdáno" - rok konce MESOH roku, dvoumístně.
+        """„26 – Plast" - rok konce MESOH roku, dvoumístně, a komodita.
 
         MESOH rok běží od 1. 10. do 30. 9., takže rok 2025/26 je „26".
         Rok je na začátku schválně: HA řadí abecedně, takže počty drží
@@ -349,8 +352,8 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
         """
         rating = self.coordinator.rating
         if rating and rating.period_to:
-            return f"{rating.period_to.year % 100:02d} – {self.komodita} odevzdáno"
-        return f"{self.komodita} odevzdáno"
+            return f"{rating.period_to.year % 100:02d} – {self.komodita}"
+        return self.komodita
 
     @property
     def native_value(self) -> int | None:
