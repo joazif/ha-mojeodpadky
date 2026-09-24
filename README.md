@@ -30,23 +30,22 @@
 
 ## Co to umí
 
-- Přihlášení jménem a heslem, obec si integrace zjistí sama.
-- Seznam **všech** harmonogramů tvé obce jako zaškrtávátka — sledovaných
-  i nesledovaných. Výběr se propíše na web: zaškrtnutí harmonogram přihlásí,
-  odškrtnutí odhlásí. Jinak to nejde, termíny server pustí jen u sledovaných.
-- Kalendářová entita se všemi svozy a senzor pro každou komoditu. Stav je
-  český popisek **Dnes / Zítra / Za 5 dní**, přesné datum a počet dní jsou
-  v atributech.
-- Posledních 15 odevzdání z nástěnky (datum, komodita, označení nádoby)
-  a událost `mojeodpadky_odevzdano` pro každý nový záznam.
-- Předpokládaný poplatek za odpady na příští rok včetně úlevy MESOH.
-- Skóre motivačního systému: EKO body na osobu a využití potenciálu
-  v procentech — přesně ta čísla, ze kterých se úleva počítá.
-- Obsloužený objem na osobu za probíhající MESOH rok (s rozpadem na směsný
-  a tříděný) a počet osob na stanovišti.
-- Tlačítko **Aktualizovat** a senzor **Poslední úspěšná aktualizace**.
-- E-mailová upozornění z webu se zapínají **pro každý harmonogram zvlášť**
-  přepínačem v ovládacích prvcích, stejně jako na webu.
+- **Svozy:** kalendářová entita se všemi svozy roku a senzor pro každou
+  komoditu se stavem **Dnes / Zítra / Za 5 dní**.
+- **Harmonogramy:** přihlášení jménem a heslem, obec se zjistí sama. Seznam
+  všech harmonogramů obce jako zaškrtávátka — zaškrtnutí harmonogram na webu
+  přihlásí, odškrtnutí odhlásí.
+- **Odevzdaný odpad:** posledních 15 záznamů z nástěnky, počet odevzdání
+  každé komodity za MESOH rok i se součtem a událost pro automatizace při
+  každém novém záznamu.
+- **MESOH:** skóre (EKO body a využití systému), obsloužený objem na osobu,
+  počet osob na stanovišti, konec MESOH roku a odpočet dní do něj.
+- **Poplatek:** předpokládaný poplatek na příští rok, sazba, úleva v korunách
+  i procentech — každé zvlášť, aby šel dělat graf.
+- **E-mailová upozornění** z webu se zapínají a vypínají pro každý harmonogram
+  zvlášť, stejně jako na webu.
+- **Víc účtů a víc obcí** — každé přihlášení je samostatná služba.
+- Tlačítko **Aktualizovat**, interval stahování 1 / 3 / 6 / 24 hodin.
 
 ## Instalace
 
@@ -97,9 +96,13 @@ ať je vidět, že se trefila.
 
 ## Entity
 
+Rozdělené tak, jak je ukazuje stránka zařízení.
+
+### Senzory
+
 | Entita | Stav | Zajímavé atributy |
 |---|---|---|
-| Kalendář (jmenuje se jako zařízení, tedy podle obce) | `Zapnuto` v den svozu | všechny svozy roku |
+| Kalendář (jmenuje se podle obce) | `Zapnuto` v den svozu | všechny svozy roku |
 | `sensor.<obec>_<komodita>` | `Za 15 dní` | `datum`, `days_to`, `harmonogram` |
 | `sensor.<obec>_pristi_svoz` | `Zítra` | `datum`, `days_to`, `types` |
 | `sensor.<obec>_posledni_odevzdani` | `Včera` | `datum`, `komodita`, `nadoba`, `zaznamy` |
@@ -107,31 +110,51 @@ ať je vidět, že se trefila.
 | `sensor.<obec>_sazba_poplatku` | `1200 Kč` | `rok` |
 | `sensor.<obec>_uleva_mesoh` | `300 Kč` | `rok` |
 | `sensor.<obec>_uleva_v_procentech` | `25 %` | `rok` |
-| `sensor.<obec>_eko_body` | `33.5 bodů` | `maximum`, `vyuziti_procent` |
-| `sensor.<obec>_vyuziti_systemu` | `30.3 %` | `body`, `maximum` |
+| `sensor.<obec>_eko_body` | `33,5 bodů` | `maximum`, `vyuziti_procent` |
+| `sensor.<obec>_vyuziti_systemu` | `30,3 %` | `body`, `maximum` |
 | `sensor.<obec>_objem_na_osobu` | `5753 l` | `smesny_l`, `tridene_l`, `obdobi_od`, `obdobi_do` |
 | `sensor.<obec>_osob_na_stanovisti` | `4 osob` | — |
-| `sensor.<obec>_26_<komodita>` | `51 ×` | `obdobi_od`, `obdobi_do` — v diagnostice |
-| `sensor.<obec>_eko_body_<komodita>` | `3,4 bodů` | `datum`, `nadoba` — v diagnostice, skrytá |
-| `sensor.<obec>_konec_mesoh_roku` | `30. 9. 2026` | `zacatek`, `zbyva_dni` |
+| `sensor.<obec>_konec_mesoh_roku` | datum konce | `zacatek`, `zbyva_dni` |
 | `sensor.<obec>_do_konce_mesoh_roku` | `6 dní` | `konec`, `konec_text` |
-| `sensor.<obec>_posledni_uspesna_aktualizace` | `20.09.2026 23:18` | `cas`, `posledni_pokus_uspesny` |
-| `button.<obec>_aktualizovat` | — | stáhne data hned |
-| `switch.<obec>_upozorneni_<komodita>` | `Zapnuto` / `Vypnuto` | `harmonogram`, `email`, `id_odberu` |
 
-Přepínač se jmenuje podle komodity („Upozornění: Papír"). Když dva sledované
-harmonogramy vyjdou stejně, přidá se to, čím se liší — v tomhle pořadí:
-místní část psaná velkými písmeny („Bioodpad Záhoří"), první slovo, které
-ten druhý nemá (typicky letopočet, „Papír 2026"), a v krajním případě ID
-harmonogramu. Názvy si každá obec píše po svém, proto ne jeden vzorec, ale
-několik záchytných bodů. Celý název je vždycky v atributu `harmonogram`.
+Stav senzorů komodit je jen na čtení a mění se každý den. Automatizace se
+proto váže na atributy (`days_to`, `datum`), ne na text.
 
-Automatizace se vždy váže na atributy, ne na text stavu — ten se mění každý
-den a je jen na koukání.
+Sazba, úleva a procenta jsou atributy poplatku **i samostatné senzory** —
+atributy se do dlouhodobých statistik neukládají, graf by z nich nebyl.
 
-Sazba, úleva a procenta jsou zároveň atributy poplatku **i samostatné
-senzory**. Atributy se totiž neukládají do dlouhodobých statistik, takže
-na graf „jak se sazba mění rok od roku" je potřeba vlastní entita.
+*Konec MESOH roku* je typu datum, takže tvar určuje tvůj profil
+(**Profil → Obecné → Formát data**).
+
+### Ovládací prvky
+
+| Entita | Co dělá |
+|---|---|
+| `button.<obec>_aktualizovat` | stáhne data hned, bez čekání na interval |
+| `switch.<obec>_upozorneni_<komodita>` | e-mailová upozornění z webu pro jeden harmonogram |
+
+Přepínač se jmenuje podle komodity („Upozornění: Papír"). Když má obec víc
+harmonogramů téže komodity, přidá se to, čím se liší: místní část psaná velkými
+písmeny („Bioodpad Záhoří"), první slovo, které ten druhý nemá (typicky
+letopočet), a v krajním případě ID harmonogramu. Celý název je v atributu
+`harmonogram`.
+
+### Diagnostika
+
+| Entita | Stav | Poznámka |
+|---|---|---|
+| `26 – Plast`, `26 – Papír`… | `51 ×` | počet odevzdání komodity za MESOH rok |
+| `26 – Σ Celkem` | `167 ×` | součet, v atributech rozpis |
+| `EKO body: Plast`… | `3,4 bodů` | body za poslední odevzdání, **skrytá** |
+| Poslední úspěšná aktualizace | `20.09.2026 23:18` | `cas`, `posledni_pokus_uspesny` |
+
+Číslo na začátku počtů je rok, kdy MESOH rok končí (2025/26 → 26). Díky němu
+drží počty v abecedním řazení pohromadě a `Σ` se řadí za všechna písmena,
+takže je součet vždycky dole. 1. října se počty vynulují a název se přepne
+na další rok.
+
+*EKO body: …* běží a ukládají historii, jen se neukazují — zobrazit je jde
+v nastavení entity. Hodí se na hlídání, jestli obec nezměnila bodování.
 
 ## Karta: přehled svozů
 
@@ -306,57 +329,35 @@ ne každý den znovu.
 
 ## Poznámky
 
-- Jak často se data stahují, se nastavuje v integraci (**Nastavit**):
-  1, 3, 6 nebo 24 hodin. Standardně 6 hodin.
-- E-mailová upozornění jdou přepínat oběma směry. Zapnutí je POST
-  (`notificationForm`), vypnutí GET `?subscribeId=<id>&do=NotificationOff`.
-  Odkaz na vypnutí je na kartě jen tehdy, když jsou upozornění zapnutá —
-  podle něj se taky pozná jejich stav.
-- Odhlašuje se **jen když výběr změníš v Home Assistantu**. Integrace si
-  pamatuje, co naposledy na web promítla, a porovnává se s tím. Když se
-  něco změní na webu, respektuje to a nepřepisuje. Bez té pojistky stačil
-  jeden rozejitý stav (ruční změna na webu, nová ID po přelomu roku) a při
-  obnovení na pozadí zmizel odběr, o který nikdo nepřišel dobrovolně.
-- Prázdný výběr harmonogramů integrace ignoruje a odběry nechá být, aby
-  chyba v konfiguraci neodhlásila celý účet.
-- Po zapnutí e-mailových upozornění se výsledek ověřuje. Když server zapne
-  upozornění u jiného harmonogramu, než na který se klikalo, přepínač to
-  ohlásí jako chybu místo aby předstíral úspěch.
-- Bioodpad má u některých obcí v listopadu svozy navíc, které server posílá
-  mimo pořadí. Integrace svozy vždy řadí podle data.
-- **Přelom roku** obec vyřeší tak, že vypíše nové harmonogramy s novými ID
-  a staré ze stránky zmizí. Integrace si u vybraných harmonogramů pamatuje
-  komoditu a místní část, takže výběr sama převede na letošní obdobu —
-  letopočet v názvu přitom ignoruje. Když nástupce nenajde, napíše to
-  do logu a nechá to na tobě.
-- Když nástěnka selže, senzory svozů jedou dál.
-- V diagnostice je pro každou komoditu **26 – Plast: 51 ×** atd. —
-  kolikrát se v probíhajícím MESOH roce odevzdala. Číslo na začátku je rok,
-  kdy MESOH rok končí (2025/26 → 26); díky němu drží počty v abecedním
-  řazení pohromadě. Roste s každým svozem, 1. října spadne na nulu a rok
-  v názvu se přepne na další. Pod nimi je **26 – Σ Celkem** se součtem;
-  Σ se řadí za všechna písmena, takže je vždycky dole.
-- Ke každé komoditě je navíc **skrytá** entita **EKO body: Plast** — kolik
-  bodů dalo poslední odevzdání. Běží a ukládá historii, jen se neukazuje;
-  zobrazit ji jde v nastavení entity. Hodí se na hlídání, jestli obec
-  nezměnila bodování.
-- Senzory, jejichž stav závisí na dnešku (Dnes / Zítra, dny do konce MESOH
-  roku), se přepočítají po půlnoci samy, nečekají na další stažení dat.
+- **Odhlašuje se jen při změně výběru v Home Assistantu.** Integrace si
+  pamatuje, co naposledy na web promítla. Změnu udělanou na webu respektuje
+  a nepřepisuje ji, prázdný výběr ignoruje — aby rozejitý stav nebo chyba
+  v nastavení neodhlásila odběr, o který nikdo nepřišel dobrovolně.
+- **Přelom roku:** obec vypíše nové harmonogramy s novými ID a staré zmizí.
+  Integrace si u vybraných harmonogramů pamatuje komoditu a místní část,
+  takže výběr sama převede na letošní obdobu. Když nástupce nenajde, napíše
+  to do logu.
+- Po zapnutí e-mailových upozornění se výsledek ověřuje; když server zapne
+  upozornění jinde, přepínač to ohlásí jako chybu.
+- Senzory, jejichž stav závisí na dnešku, se přepočítají po půlnoci samy.
+- Když nástěnka nebo hodnocení selže, senzory svozů jedou dál.
 
 ## Jak to funguje uvnitř
 
 Stránka svozového kalendáře nese celý rok v atributu `data-events` elementu
 `#collectionScheduleCalendar` (JSON pro FullCalendar), takže na stažení stačí
-jediný GET s přihlášenou session. Nástěnka je obyčejná HTML tabulka
-stránkovaná přes query parametry. Žádné API, žádné XHR.
+jediný GET s přihlášenou session. Nástěnka a hodnocení stanoviště jsou
+obyčejné HTML tabulky. Žádné API, žádné XHR.
 
-Přepínání odběrů jsou obyčejné POSTy bez CSRF tokenu:
+Přihlášení i přepínání odběrů jsou obyčejné požadavky bez CSRF tokenu:
 
 | Akce | Metoda | Payload |
 |---|---|---|
 | Přihlášení | POST na `/` | `login`, `password`, `_do=signInForm-submit`, `_submit=Přihlásit` |
 | Začít sledovat | POST | `_do=subscribeForm-form-submit`, `schedule_id`, `notification`, `email` |
 | Přestat sledovat | GET | `?scheduleId=<id>&do=Unsubscribe` |
+| Zapnout upozornění | POST | `_do=notificationForm-form-submit`, `subscribe_id`, `email` |
+| Vypnout upozornění | GET | `?subscribeId=<id>&do=NotificationOff` |
 
 Bez externích závislostí, parsuje se regexy ze standardní knihovny.
 
