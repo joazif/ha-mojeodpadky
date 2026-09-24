@@ -93,6 +93,19 @@ async def async_migrate_entry(
         hass.config_entries.async_update_entry(entry, minor_version=2)
         _LOGGER.info("Migrace na 1.2: skryto %s entit EKO body", skryto)
 
+    if entry.version == 1 and entry.minor_version < 3:
+        # 1.2 -> 1.3: EKO body už nejsou samostatné entity, ale atribut
+        # počtů odevzdání. Skryté entity HA na stránce zařízení stejně
+        # ukazoval, tak se z registru uklidí úplně.
+        registr = er.async_get(hass)
+        smazano = 0
+        for zaznam in er.async_entries_for_config_entry(registr, entry.entry_id):
+            if "_points_" in (zaznam.unique_id or ""):
+                registr.async_remove(zaznam.entity_id)
+                smazano += 1
+        hass.config_entries.async_update_entry(entry, minor_version=3)
+        _LOGGER.info("Migrace na 1.3: odstraněno %s entit EKO body", smazano)
+
     return True
 
 

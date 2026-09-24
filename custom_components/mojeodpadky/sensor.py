@@ -92,25 +92,6 @@ async def async_setup_entry(
     _add_new_types()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_types))
 
-    known_points: set[str] = set()
-
-    @callback
-    def _add_new_points() -> None:
-        # Komodity přibývají, jak se na stránkách objevují; olej nebo
-        # elektro třeba jen párkrát do roka.
-        komodity = coordinator.data.points if coordinator.data else {}
-        nove = [
-            CommodityPointsSensor(coordinator, entry.entry_id, komodita)
-            for komodita in komodity
-            if komodita not in known_points
-        ]
-        if nove:
-            known_points.update(sensor.komodita for sensor in nove)
-            async_add_entities(nove)
-
-    _add_new_points()
-    entry.async_on_unload(coordinator.async_add_listener(_add_new_points))
-
     known_counts: set[str] = set()
 
     @callback
@@ -275,53 +256,6 @@ class FeeSensor(MojeOdpadkyEntity, SensorEntity):
         }
 
 
-class CommodityPointsSensor(MojeOdpadkyEntity, SensorEntity):
-    """Kolik EKO bodů dala komodita za poslední odevzdání.
-
-    Číselná hodnota se state_class, takže po kliknutí je graf a změna
-    bodování (obec to může během roku upravit) bude vidět v historii.
-    """
-
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "bodů"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    # Vzniká skrytá: běží, ukládá historii a jde na ni automatizace, jen
-    # nezabírá místo. Sazba se mění zřídka, na očích mají být počty.
-    _attr_entity_registry_visible_default = False
-
-    def __init__(
-        self, coordinator: MojeOdpadkyCoordinator, entry_id: str, komodita: str
-    ) -> None:
-        super().__init__(coordinator, entry_id)
-        self.komodita = komodita
-        self._attr_name = f"EKO body: {komodita}"
-        self._attr_unique_id = f"{entry_id}_points_{_slug(komodita)}"
-        self._attr_icon = ICONS.get(komodita, "mdi:star-circle-outline")
-
-    @property
-    def _zaznam(self):
-        if not self.coordinator.data:
-            return None
-        return self.coordinator.data.points.get(self.komodita)
-
-    @property
-    def native_value(self) -> float | None:
-        """Body za poslední odevzdání této komodity."""
-        zaznam = self._zaznam
-        return points_value(zaznam) if zaznam else None
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        """Z kterého odevzdání ta hodnota je."""
-        zaznam = self._zaznam
-        if not zaznam:
-            return {}
-        return {
-            ATTR_DATE: zaznam.day.isoformat(),
-            ATTR_CONTAINER: zaznam.container,
-        }
-
-
 class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
     """Kolikrát se komodita odevzdala v probíhajícím MESOH roce.
 
@@ -366,14 +300,28 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Za jaké období se počítá."""
+        """Období a body za poslední odevzdání této komodity.
+
+        Body bývaly samostatná entita; na stránce zařízení ale HA ukazuje
+        i skryté entity, tak jsou tady. Nejnovější záznam se hledá při každém
+        stažení na nástěnce i v tabulce za celý MESOH rok.
+        """
+        atributy: dict = {}
         rating = self.coordinator.rating
-        if not rating or not rating.period_from or not rating.period_to:
-            return {}
-        return {
-            "obdobi_od": rating.period_from.isoformat(),
-            "obdobi_do": rating.period_to.isoformat(),
-        }
+        if rating and rating.period_from and rating.period_to:
+            atributy["obdobi_od"] = rating.period_from.isoformat()
+            atributy["obdobi_do"] = rating.period_to.isoformat()
+
+        zaznam = (
+            self.coordinator.data.points.get(self.komodita)
+            if self.coordinator.data
+            else None
+        )
+        if zaznam:
+            atributy["eko_body"] = points_value(zaznam)
+            atributy["posledni_odevzdani"] = zaznam.day.isoformat()
+            atributy[ATTR_CONTAINER] = zaznam.container
+        return atributy
 
 
 class CountTotalSensor(MojeOdpadkyEntity, SensorEntity):

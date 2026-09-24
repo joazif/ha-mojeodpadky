@@ -141,11 +141,10 @@ letopočet), a v krajním případě ID harmonogramu. Celý název je v atributu
 
 ### Diagnostika
 
-| Entita | Stav | Poznámka |
+| Entita | Stav | Zajímavé atributy |
 |---|---|---|
-| `26 – Plast`, `26 – Papír`… | `51 ×` | počet odevzdání komodity za MESOH rok |
-| `26 – Σ Celkem` | `167 ×` | součet, v atributech rozpis |
-| `EKO body: Plast`… | `3,4 bodů` | body za poslední odevzdání, **skrytá** |
+| `26 – Plast`, `26 – Papír`… | `51 ×` | `eko_body`, `posledni_odevzdani`, `nadoba`, `obdobi_od`, `obdobi_do` |
+| `26 – Σ Celkem` | `167 ×` | rozpis podle komodit |
 | Poslední úspěšná aktualizace | `20.09.2026 23:18` | `cas`, `posledni_pokus_uspesny` |
 
 Číslo na začátku počtů je rok, kdy MESOH rok končí (2025/26 → 26). Díky němu
@@ -153,8 +152,10 @@ drží počty v abecedním řazení pohromadě a `Σ` se řadí za všechna pís
 takže je součet vždycky dole. 1. října se počty vynulují a název se přepne
 na další rok.
 
-*EKO body: …* běží a ukládají historii, jen se neukazují — zobrazit je jde
-v nastavení entity. Hodí se na hlídání, jestli obec nezměnila bodování.
+Atribut `eko_body` říká, kolik bodů dalo poslední odevzdání té komodity
+(plast 3,4, papír 3…). Při každém stažení se hledá nejnovější záznam na
+nástěnce i v tabulce za celý MESOH rok, takže když obec bodování změní,
+uvidíš to po kliknutí na počet.
 
 ## Karta: přehled svozů
 
