@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import date
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -65,6 +70,8 @@ async def async_setup_entry(
         ScorePointsSensor(coordinator, entry.entry_id),
         ScoreUsageSensor(coordinator, entry.entry_id),
         VolumeSensor(coordinator, entry.entry_id),
+        PeriodEndSensor(coordinator, entry.entry_id),
+        PeriodDaysLeftSensor(coordinator, entry.entry_id),
         PeopleSensor(coordinator, entry.entry_id),
     ]
     known: set[str] = set()
@@ -96,6 +103,7 @@ class NextCollectionSensor(MojeOdpadkyEntity, SensorEntity):
 
     _attr_translation_key = "next_collection"
     _attr_icon = "mdi:calendar-clock"
+    _prepocitat_o_pulnoci = True
 
     def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id)
@@ -124,6 +132,8 @@ class NextCollectionSensor(MojeOdpadkyEntity, SensorEntity):
 
 class WasteTypeSensor(MojeOdpadkyEntity, SensorEntity):
     """Nejbližší svoz jedné komodity."""
+
+    _prepocitat_o_pulnoci = True
 
     def __init__(
         self, coordinator: MojeOdpadkyCoordinator, entry_id: str, waste_type: str
@@ -158,6 +168,7 @@ class LastCollectedSensor(MojeOdpadkyEntity, SensorEntity):
 
     _attr_translation_key = "last_collected"
     _attr_icon = "mdi:package-variant-closed-check"
+    _prepocitat_o_pulnoci = True
 
     def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id)
@@ -356,6 +367,73 @@ class VolumeSensor(MojeOdpadkyEntity, SensorEntity):
             atributy["obdobi_od"] = rating.period_from.isoformat()
             atributy["obdobi_do"] = rating.period_to.isoformat()
         return atributy
+
+
+class PeriodEndSensor(MojeOdpadkyEntity, SensorEntity):
+    """Kdy končí MESOH rok - body se sbírají od 1. 10. do 30. 9."""
+
+    _attr_translation_key = "period_end"
+    _attr_icon = "mdi:calendar-end"
+    _attr_device_class = SensorDeviceClass.DATE
+    _prepocitat_o_pulnoci = True
+
+    def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._attr_unique_id = f"{entry_id}_period_end"
+
+    @property
+    def native_value(self) -> date | None:
+        """Poslední den probíhajícího MESOH roku."""
+        rating = self.coordinator.rating
+        return rating.period_to if rating else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Začátek období a kolik dní zbývá."""
+        rating = self.coordinator.rating
+        if not rating or not rating.period_to:
+            return {}
+        atributy: dict = {"zbyva_dni": (rating.period_to - dt_today()).days}
+        if rating.period_from:
+            atributy["zacatek"] = rating.period_from.isoformat()
+        return atributy
+
+
+class PeriodDaysLeftSensor(MojeOdpadkyEntity, SensorEntity):
+    """Kolik dní zbývá do konce MESOH roku - číslo, na které jde automatizace.
+
+    Text typu "Za 6 dní" by se číst dal, ale podmínka "méně než 14 dní"
+    by na něm postavit nešla. Proto je to samostatná entita s číslem.
+    """
+
+    _attr_translation_key = "period_days_left"
+    _attr_icon = "mdi:timer-sand"
+    _attr_native_unit_of_measurement = "dní"
+    _prepocitat_o_pulnoci = True
+
+    def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._attr_unique_id = f"{entry_id}_period_days_left"
+
+    @property
+    def native_value(self) -> int | None:
+        """Dny do konce MESOH roku; v poslední den 0, pak záporné."""
+        rating = self.coordinator.rating
+        if not rating or not rating.period_to:
+            return None
+        return (rating.period_to - dt_today()).days
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Datum konce, ať je vidět, k čemu se odpočítává."""
+        rating = self.coordinator.rating
+        if not rating or not rating.period_to:
+            return {}
+        return {
+            "konec": rating.period_to.isoformat(),
+            "konec_text": f"{rating.period_to.day}. {rating.period_to.month}. "
+            f"{rating.period_to.year}",
+        }
 
 
 class PeopleSensor(MojeOdpadkyEntity, SensorEntity):

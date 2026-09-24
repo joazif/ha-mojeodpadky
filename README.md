@@ -111,6 +111,8 @@ ať je vidět, že se trefila.
 | `sensor.<obec>_vyuziti_systemu` | `30.3 %` | `body`, `maximum` |
 | `sensor.<obec>_objem_na_osobu` | `5753 l` | `smesny_l`, `tridene_l`, `obdobi_od`, `obdobi_do` |
 | `sensor.<obec>_osob_na_stanovisti` | `4 osob` | — |
+| `sensor.<obec>_konec_mesoh_roku` | `30. 9. 2026` | `zacatek`, `zbyva_dni` |
+| `sensor.<obec>_do_konce_mesoh_roku` | `6 dní` | `konec`, `konec_text` |
 | `sensor.<obec>_posledni_uspesna_aktualizace` | `20.09.2026 23:18` | `cas`, `posledni_pokus_uspesny` |
 | `button.<obec>_aktualizovat` | — | stáhne data hned |
 | `switch.<obec>_upozorneni_<komodita>` | `Zapnuto` / `Vypnuto` | `harmonogram`, `email`, `id_odberu` |
@@ -276,6 +278,30 @@ automatizaci omezit jen na jeden účet:
           ucet: Nová Lhota (jiny_login)
 ```
 
+### Připomenutí konce MESOH roku
+
+MESOH rok běží od 1. 10. do 30. 9. a body se počítají jen za ten rok.
+Senzor *Do konce MESOH roku* je číslo, takže na něj jde postavit podmínka:
+
+```yaml
+automation:
+  - alias: Blíží se konec MESOH roku
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.<obec>_do_konce_mesoh_roku
+        below: 15
+    actions:
+      - action: notify.mobile_app
+        data:
+          message: >-
+            MESOH rok končí
+            {{ state_attr('sensor.<obec>_do_konce_mesoh_roku', 'konec_text') }},
+            zbývá {{ states('sensor.<obec>_do_konce_mesoh_roku') }} dní.
+```
+
+`numeric_state` se spustí jednou, ve chvíli kdy hodnota klesne pod hranici —
+ne každý den znovu.
+
 ## Poznámky
 
 - Jak často se data stahují, se nastavuje v integraci (**Nastavit**):
@@ -302,6 +328,8 @@ automatizaci omezit jen na jeden účet:
   letopočet v názvu přitom ignoruje. Když nástupce nenajde, napíše to
   do logu a nechá to na tobě.
 - Když nástěnka selže, senzory svozů jedou dál.
+- Senzory, jejichž stav závisí na dnešku (Dnes / Zítra, dny do konce MESOH
+  roku), se přepočítají po půlnoci samy, nečekají na další stažení dat.
 
 ## Jak to funguje uvnitř
 

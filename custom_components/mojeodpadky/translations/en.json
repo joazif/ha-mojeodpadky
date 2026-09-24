@@ -73,6 +73,12 @@
       },
       "fee_discount_percent": {
         "name": "Discount percentage"
+      },
+      "period_end": {
+        "name": "MESOH year end"
+      },
+      "period_days_left": {
+        "name": "Days until MESOH year end"
       }
     },
     "button": {

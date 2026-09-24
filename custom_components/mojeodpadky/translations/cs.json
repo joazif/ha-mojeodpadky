@@ -73,6 +73,12 @@
       },
       "fee_discount_percent": {
         "name": "Úleva v procentech"
+      },
+      "period_end": {
+        "name": "Konec MESOH roku"
+      },
+      "period_days_left": {
+        "name": "Do konce MESOH roku"
       }
     },
     "button": {
