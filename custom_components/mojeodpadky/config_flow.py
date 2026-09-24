@@ -104,10 +104,27 @@ class MojeOdpadkyConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 body = await client.async_fetch_page()
             except InvalidAuth:
+                _LOGGER.warning(
+                    "Přihlášení účtu %s: server odmítl jméno nebo heslo",
+                    user_input[CONF_USERNAME],
+                )
                 errors["base"] = "invalid_auth"
-            except SlugNotFound:
+            except SlugNotFound as err:
+                _LOGGER.warning(
+                    "Přihlášení účtu %s prošlo, ale obec se nezjistila: %s",
+                    user_input[CONF_USERNAME],
+                    err,
+                )
                 errors["base"] = "slug_not_found"
-            except MojeOdpadkyError:
+            except MojeOdpadkyError as err:
+                # Pod "nepodařilo se spojit" se schovává víc různých příčin;
+                # bez skutečné zprávy v logu se nedá poznat, která to je.
+                _LOGGER.warning(
+                    "Přihlášení účtu %s selhalo (obec: %s): %s",
+                    user_input[CONF_USERNAME],
+                    client.slug or "nezjištěna",
+                    err,
+                )
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(
