@@ -72,6 +72,7 @@ async def async_setup_entry(
         ScoreUsageSensor(coordinator, entry.entry_id),
         VolumeSensor(coordinator, entry.entry_id),
         PeriodEndSensor(coordinator, entry.entry_id),
+        CountTotalSensor(coordinator, entry.entry_id),
         PeriodDaysLeftSensor(coordinator, entry.entry_id),
         PeopleSensor(coordinator, entry.entry_id),
     ]
@@ -373,6 +374,45 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
             "obdobi_od": rating.period_from.isoformat(),
             "obdobi_do": rating.period_to.isoformat(),
         }
+
+
+class CountTotalSensor(MojeOdpadkyEntity, SensorEntity):
+    """Součet všech odevzdání v probíhajícím MESOH roce."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "×"
+    _attr_icon = "mdi:sigma"
+
+    def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._attr_unique_id = f"{entry_id}_count_total"
+
+    @property
+    def name(self) -> str:
+        """„26 – Σ Celkem".
+
+        Řecké Σ se v abecedním řazení dostane za všechna česká písmena,
+        takže součet je v diagnostice vždycky pod jednotlivými komoditami.
+        """
+        rating = self.coordinator.rating
+        if rating and rating.period_to:
+            return f"{rating.period_to.year % 100:02d} – Σ Celkem"
+        return "Σ Celkem"
+
+    @property
+    def native_value(self) -> int | None:
+        """Všechna odevzdání dohromady."""
+        pocty = self.coordinator.data.year_counts if self.coordinator.data else None
+        return sum(pocty.values()) if pocty is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Z čeho se součet skládá, od nejčastější komodity."""
+        pocty = self.coordinator.data.year_counts if self.coordinator.data else None
+        if not pocty:
+            return {}
+        return dict(sorted(pocty.items(), key=lambda kv: -kv[1]))
 
 
 class FeePartSensor(MojeOdpadkyEntity, SensorEntity):

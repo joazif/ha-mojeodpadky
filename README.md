@@ -334,7 +334,8 @@ ne každý den znovu.
   kolikrát se v probíhajícím MESOH roce odevzdala. Číslo na začátku je rok,
   kdy MESOH rok končí (2025/26 → 26); díky němu drží počty v abecedním
   řazení pohromadě. Roste s každým svozem, 1. října spadne na nulu a rok
-  v názvu se přepne na další.
+  v názvu se přepne na další. Pod nimi je **26 – Σ Celkem** se součtem;
+  Σ se řadí za všechna písmena, takže je vždycky dole.
 - Ke každé komoditě je navíc **skrytá** entita **EKO body: Plast** — kolik
   bodů dalo poslední odevzdání. Běží a ukládá historii, jen se neukazuje;
   zobrazit ji jde v nastavení entity. Hodí se na hlídání, jestli obec
