@@ -336,9 +336,20 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry_id)
         self.komodita = komodita
-        self._attr_name = f"{komodita} letos odevzdáno"
         self._attr_unique_id = f"{entry_id}_count_{_slug(komodita)}"
         self._attr_icon = ICONS.get(komodita, "mdi:counter")
+
+    @property
+    def name(self) -> str:
+        """„Plast odevzdáno 26" - rok konce MESOH roku, dvoumístně.
+
+        MESOH rok běží od 1. 10. do 30. 9., takže rok 2025/26 je „26".
+        Po 1. říjnu se sám přepne na další, protože bere období ze stránky.
+        """
+        rating = self.coordinator.rating
+        if rating and rating.period_to:
+            return f"{self.komodita} odevzdáno {rating.period_to.year % 100:02d}"
+        return f"{self.komodita} odevzdáno"
 
     @property
     def native_value(self) -> int | None:
