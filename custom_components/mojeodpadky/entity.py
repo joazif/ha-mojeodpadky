@@ -19,8 +19,13 @@ class MojeOdpadkyEntity(CoordinatorEntity[MojeOdpadkyCoordinator]):
         self._entry_id = entry_id
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)},
-            # Název obce ze stránky /{slug}; než se zjistí, poslouží slug.
-            name=coordinator.client.town or coordinator.client.slug or "Svoz odpadu",
+            # Jako služba: u jediného účtu obec, u dalšího v téže obci
+            # obec a login. Starší instalace bez služby spadnou na obec.
+            name=(
+                coordinator.entry.title
+                if coordinator.entry is not None
+                else coordinator.client.town or coordinator.client.slug or "Svoz odpadu"
+            ),
             manufacturer="mojeodpadky.cz",
             model=coordinator.client.slug or "",
             entry_type=DeviceEntryType.SERVICE,

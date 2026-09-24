@@ -333,6 +333,9 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
                     ATTR_WASTE_TYPE: item.waste_type,
                     ATTR_CONTAINER: item.container,
                     "ekobody": item.points,
+                    # Při víc účtech musí automatizace poznat, čí záznam to je.
+                    "ucet": self.entry.title if self.entry else self.client.slug,
+                    "entry_id": self.entry.entry_id if self.entry else None,
                 },
             )
 

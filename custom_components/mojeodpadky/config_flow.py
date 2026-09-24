@@ -131,6 +131,23 @@ class MojeOdpadkyConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=STEP_USER_SCHEMA, errors=errors
         )
 
+    def _entry_title(self) -> str:
+        """Název služby a tím i zařízení a začátku všech entity_id.
+
+        Jeden účet v obci se jmenuje prostě podle obce. Další účet ve stejné
+        obci (třeba člen rodiny) dostane do závorky login - jinak by měly
+        dvě zařízení stejný název a entity by se lišily jen koncovkou _2.
+        """
+        obec = self._town or self._data[CONF_SLUG]
+        stejna_obec = [
+            entry
+            for entry in self._async_current_entries()
+            if entry.data.get(CONF_SLUG) == self._data[CONF_SLUG]
+        ]
+        if stejna_obec:
+            return f"{obec} ({self._data[CONF_USERNAME]})"
+        return obec
+
     async def async_step_schedules(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -139,7 +156,7 @@ class MojeOdpadkyConfigFlow(ConfigFlow, domain=DOMAIN):
             if self._client is not None:
                 await self._client.async_close()
             return self.async_create_entry(
-                title=self._town or f"Moje odpadky ({self._data[CONF_SLUG]})",
+                title=self._entry_title(),
                 data=self._data,
                 options={
                     CONF_SCHEDULES: user_input[CONF_SCHEDULES],

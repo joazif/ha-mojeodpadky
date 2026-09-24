@@ -70,6 +70,23 @@ Zkopíruj `custom_components/mojeodpadky/` do své konfigurační složky
 (`/config/custom_components/mojeodpadky/`), restartuj Home Assistant
 a přidej integraci v UI.
 
+## Víc účtů a víc obcí
+
+Každé přihlášení je samostatná služba. Další účet přidáš v **Nastavení →
+Zařízení a služby → Moje odpadky → Přidat službu** — třeba člena rodiny ve
+stejné obci, nebo účet v úplně jiné obci. Každý má vlastní zařízení, vlastní
+entity a vlastní výběr harmonogramů.
+
+Jak se zařízení pojmenují:
+
+| Účet | Název zařízení | Entity |
+|---|---|---|
+| první účet v obci | `Nová Lhota` | `sensor.nova_lhota_papir` |
+| další účet v téže obci | `Nová Lhota (jiny_login)` | `sensor.nova_lhota_jiny_login_papir` |
+| účet v jiné obci | `Horní Ves` | `sensor.horni_ves_papir` |
+
+Stejný login podruhé přidat nejde.
+
 ## Obec
 
 Nikde se nezadává. Integrace ji zjistí z přihlášeného webu — z adresy po
@@ -244,8 +261,19 @@ automation:
       - action: notify.mobile_app
         data:
           message: >-
-            Zapsáno: {{ trigger.event.data.komodita }}
+            {{ trigger.event.data.ucet }}: {{ trigger.event.data.komodita }}
             ({{ trigger.event.data.nadoba }}), {{ trigger.event.data.datum }}.
+```
+
+Při víc účtech nese událost pole `ucet` (název služby) a `entry_id`, takže jde
+automatizaci omezit jen na jeden účet:
+
+```yaml
+    triggers:
+      - trigger: event
+        event_type: mojeodpadky_odevzdano
+        event_data:
+          ucet: Nová Lhota (jiny_login)
 ```
 
 ## Poznámky
