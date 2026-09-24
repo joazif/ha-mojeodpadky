@@ -269,7 +269,14 @@ check("nastenka ma prednost pri stejnem datu",
       _api.latest_points([CollectedItem(date(2026, 9, 16), "Plast", "nastenka", "3")],
                          [CollectedItem(date(2026, 9, 16), "Plast", "rok", "3,4")]
                          )["Plast"].container, "nastenka")
-check("stranka bez tabulky", MojeOdpadkyClient.parse_rating_records("<html></html>"), [])
+check("stranka bez tabulky vraci None", MojeOdpadkyClient.parse_rating_records("<html></html>"), None)
+check("prazdna tabulka na zacatku roku vraci []",
+      MojeOdpadkyClient.parse_rating_records(
+          "<table><tr><th>Datum</th><th>Komodita</th><th>Označení nádoby</th>"
+          "<th>EKO body</th><th>Plnost nádoby</th></tr></table>"), [])
+check("pocty odevzdani", _api.count_by_type(rok),
+      {"Plast": 2, "Směsný odpad": 1, "Jedlý olej a tuk": 1})
+check("prazdny rok bez poctu", _api.count_by_type([]), {})
 
 print("parse_people")
 check("pocet osob z inventury", MojeOdpadkyClient.parse_people(INVENTURA), 4)

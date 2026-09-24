@@ -314,6 +314,15 @@ def latest_points(*zdroje: list[CollectedItem]) -> dict[str, CollectedItem]:
     return vysledek
 
 
+def count_by_type(records: list[CollectedItem]) -> dict[str, int]:
+    """Kolikrát se která komodita odevzdala: {"Plast": 51, "Papír": 45}."""
+    pocty: dict[str, int] = {}
+    for item in records:
+        if item.waste_type:
+            pocty[item.waste_type] = pocty.get(item.waste_type, 0) + 1
+    return pocty
+
+
 def fingerprint(item: Schedule) -> str:
     """Otisk harmonogramu, který přežije přelom roku.
 
@@ -963,12 +972,16 @@ class MojeOdpadkyClient:
         )
 
     @staticmethod
-    def parse_rating_records(body: str) -> list[CollectedItem]:
+    def parse_rating_records(body: str) -> list[CollectedItem] | None:
         """Záznamy za celý MESOH rok z podrobné tabulky Hodnocení stanoviště.
 
         Sloupce: Datum | Komodita | Označení nádoby | Typ nádoby | Objem |
         Hmotnost | EKO body | Plnost | Čistota | Poznámka. Na stránce je
         čtrnáct tabulek; ta správná je jediná s plností i čistotou.
+
+        ``None`` znamená, že tabulka na stránce není (výpadek, jiný layout),
+        prázdný seznam, že je a nic v ní není - typicky 1. října na začátku
+        nového MESOH roku. Počty odevzdání se v tu chvíli mají vynulovat.
         """
         for table in RE_TABLE.findall(body):
             table_rows = RE_ROW.findall(table)
@@ -990,7 +1003,7 @@ class MojeOdpadkyClient:
                 (i for i, nazev in enumerate(hlavicka) if "eko" in nazev), None
             )
             if sloupec_bodu is None:
-                return []
+                return None
 
             items: list[CollectedItem] = []
             for row in table_rows[1:]:
@@ -1010,7 +1023,7 @@ class MojeOdpadkyClient:
                 )
             items.sort(key=lambda item: item.day, reverse=True)
             return items
-        return []
+        return None
 
     @staticmethod
     def parse_score(body: str, text: str | None = None) -> Score | None:

@@ -110,6 +110,23 @@ async def async_setup_entry(
     _add_new_points()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_points))
 
+    known_counts: set[str] = set()
+
+    @callback
+    def _add_new_counts() -> None:
+        pocty = (coordinator.data.year_counts if coordinator.data else None) or {}
+        nove = [
+            CommodityCountSensor(coordinator, entry.entry_id, komodita)
+            for komodita in pocty
+            if komodita not in known_counts
+        ]
+        if nove:
+            known_counts.update(sensor.komodita for sensor in nove)
+            async_add_entities(nove)
+
+    _add_new_counts()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_counts))
+
     async_add_entities(entities)
 
 
@@ -267,6 +284,9 @@ class CommodityPointsSensor(MojeOdpadkyEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = "bodů"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    # Vzniká skrytá: běží, ukládá historii a jde na ni automatizace, jen
+    # nezabírá místo. Sazba se mění zřídka, na očích mají být počty.
+    _attr_entity_registry_visible_default = False
 
     def __init__(
         self, coordinator: MojeOdpadkyCoordinator, entry_id: str, komodita: str
@@ -298,6 +318,45 @@ class CommodityPointsSensor(MojeOdpadkyEntity, SensorEntity):
         return {
             ATTR_DATE: zaznam.day.isoformat(),
             ATTR_CONTAINER: zaznam.container,
+        }
+
+
+class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
+    """Kolikrát se komodita odevzdala v probíhajícím MESOH roce.
+
+    Roste s každým odevzdáním a 1. října, kdy začíná nový MESOH rok,
+    spadne na nulu - proto total_increasing, který s vynulováním počítá.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self, coordinator: MojeOdpadkyCoordinator, entry_id: str, komodita: str
+    ) -> None:
+        super().__init__(coordinator, entry_id)
+        self.komodita = komodita
+        self._attr_name = f"{komodita} letos odevzdáno"
+        self._attr_unique_id = f"{entry_id}_count_{_slug(komodita)}"
+        self._attr_icon = ICONS.get(komodita, "mdi:counter")
+
+    @property
+    def native_value(self) -> int | None:
+        """Počet odevzdání; komodita, která letos ještě nebyla, má 0."""
+        pocty = self.coordinator.data.year_counts if self.coordinator.data else None
+        if pocty is None:
+            return None
+        return pocty.get(self.komodita, 0)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Za jaké období se počítá."""
+        rating = self.coordinator.rating
+        if not rating or not rating.period_from or not rating.period_to:
+            return {}
+        return {
+            "obdobi_od": rating.period_from.isoformat(),
+            "obdobi_do": rating.period_to.isoformat(),
         }
 
 

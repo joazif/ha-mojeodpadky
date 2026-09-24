@@ -20,6 +20,7 @@ from .api import (
     Rating,
     Schedule,
     Score,
+    count_by_type,
     diff_collected,
     find_successor,
     fingerprint,
@@ -56,6 +57,9 @@ class MojeOdpadkyData:
     rating: Rating | None = None
     # Body za poslední odevzdání každé komodity: {"Plast": záznam, ...}
     points: dict[str, CollectedItem] = field(default_factory=dict)
+    # Kolikrát se která komodita odevzdala v probíhajícím MESOH roce;
+    # None, dokud se hodnocení ani jednou nestáhlo.
+    year_counts: dict[str, int] | None = None
 
 
 class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
@@ -91,7 +95,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         self._heavy_at: datetime | None = None
         # Záznamy za celý MESOH rok z hodnocení; drží se mezi obnoveními,
         # protože se hodnocení nestahuje pokaždé.
-        self._year_records: list[CollectedItem] = []
+        self._year_records: list[CollectedItem] | None = None
 
     async def _async_update_data(self) -> MojeOdpadkyData:
         # Kalendář se stahuje jednou a stránka se pak podává dál; dřív si ji
@@ -141,6 +145,11 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         rating, people = await self._async_heavy_pages(bool(nove))
         self._fire_new_collected(nove)
         points = self._latest_points(collected)
+        year_counts = (
+            count_by_type(self._year_records)
+            if self._year_records is not None
+            else None
+        )
 
         self.last_success = dt_now()
 
@@ -155,6 +164,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             score=score,
             rating=rating,
             points=points,
+            year_counts=year_counts,
         )
 
     async def _async_collected(
@@ -331,7 +341,8 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         # Když se stránka stahuje, vezmou se z ní i záznamy za celý rok -
         # je to jediný zdroj bodů u komodit, které se odevzdávají zřídka.
         zaznamy = self.client.parse_rating_records(body)
-        if zaznamy:
+        if zaznamy is not None:
+            # I prázdný seznam platí: nový MESOH rok, počty jdou na nulu.
             self._year_records = zaznamy
         return self.client.parse_rating(body)
 
@@ -345,7 +356,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         nejsou). Komodita, která ze stránek zmizí - třeba po začátku nového
         MESOH roku - si drží poslední známou hodnotu, ať graf nespadne do prázdna.
         """
-        nove = latest_points(collected, self._year_records)
+        nove = latest_points(collected, self._year_records or [])
         dosavadni = dict(self.data.points) if self.data else {}
         for komodita, item in nove.items():
             stary = dosavadni.get(komodita)
