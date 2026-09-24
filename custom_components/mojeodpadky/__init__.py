@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 
 from .api import InvalidAuth, MojeOdpadkyClient, MojeOdpadkyError
 from .const import (
@@ -66,6 +67,32 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
+) -> bool:
+    """Jednorázové úpravy starších instalací.
+
+    1.1 -> 1.2: entity "EKO body: <komodita>" vznikaly viditelné, teď mají
+    být skryté. Nastavení skrytosti v kódu platí jen pro nově vznikající
+    entity a smazat entitu, kterou integrace pořád poskytuje, HA nedovolí -
+    proto se už existující skryjí tady. Proběhne to jednou; když si je pak
+    uživatel zase zobrazí, zůstanou zobrazené.
+    """
+    if entry.version == 1 and entry.minor_version < 2:
+        registr = er.async_get(hass)
+        skryto = 0
+        for zaznam in er.async_entries_for_config_entry(registr, entry.entry_id):
+            if "_points_" in (zaznam.unique_id or "") and zaznam.hidden_by is None:
+                registr.async_update_entity(
+                    zaznam.entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
+                )
+                skryto += 1
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+        _LOGGER.info("Migrace na 1.2: skryto %s entit EKO body", skryto)
+
     return True
 
 

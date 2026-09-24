@@ -81,6 +81,8 @@ class MojeOdpadkyConfigFlow(ConfigFlow, domain=DOMAIN):
     """Přihlášení a výběr harmonogramů."""
 
     VERSION = 1
+    # 2: entity EKO body se skrývají (viz async_migrate_entry v __init__.py)
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         self._client: MojeOdpadkyClient | None = None
