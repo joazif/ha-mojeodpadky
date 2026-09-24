@@ -173,6 +173,25 @@ check("dvojita mezera u plastu srovnana",
 print("parse_default_email")
 check("email odescapovan", MojeOdpadkyClient.parse_default_email(BODY), "uzivatel@example.com")
 
+print("ucet bez sledovanych harmonogramu")
+jen_karty = (
+    '<div class="m-portlet m-portlet--mobile"><div class="m-portlet__head">'
+    '<h3 class="m-portlet__head-text">Harmonogram papír 2026</h3></div>'
+    '<a href="" class="btn js-subscribe-form" data-id="555" '
+    'data-label="Harmonogram papír 2026">Začít sledovat</a></div>'
+)
+check("stranka bez svozu ale s kartami je kalendar",
+      MojeOdpadkyClient._is_calendar(jen_karty), True)
+check("prihlasovaci stranka neni kalendar",
+      MojeOdpadkyClient._is_calendar('<form id="frm-signInForm"></form>' + jen_karty),
+      False)
+check("prazdna stranka neni kalendar", MojeOdpadkyClient._is_calendar("<html></html>"),
+      False)
+check("harmonogramy se z ni prectou",
+      [(h.schedule_id, h.subscribed) for h in MojeOdpadkyClient.parse_schedules(jen_karty)],
+      [(555, False)])
+check("svozy jsou prazdne", MojeOdpadkyClient.parse_events(jen_karty), [])
+
 print("prazdna stranka")
 check("zadne harmonogramy", MojeOdpadkyClient.parse_schedules("<html></html>"), [])
 check("zadne svozy", MojeOdpadkyClient.parse_events("<html></html>"), [])

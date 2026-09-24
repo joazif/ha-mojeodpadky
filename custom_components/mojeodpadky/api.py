@@ -500,19 +500,39 @@ class MojeOdpadkyClient:
 
             body = await self._get(self._calendar_url)
 
-            if RE_EVENTS.search(body) is None:
+            if not self._is_calendar(body):
                 # Session nejspíš vypršela - jeden pokus o obnovu.
                 _LOGGER.debug("Kalendář nenalezen, obnovuji přihlášení")
                 self._logged_in = False
                 await self.async_login()
                 body = await self._get(self._calendar_url)
 
-            if RE_EVENTS.search(body) is None:
+            if not self._is_calendar(body):
                 raise MojeOdpadkyError(
-                    "Na stránce chybí data-events - změnil se layout webu?"
+                    "Stránka svozového kalendáře nemá ani svozy, ani karty "
+                    "harmonogramů - změnil se layout webu?"
                 )
 
+            if RE_EVENTS.search(body) is None:
+                _LOGGER.debug(
+                    "Kalendář je bez svozů - účet zatím nesleduje žádný harmonogram"
+                )
             return body
+
+    @staticmethod
+    def _is_calendar(body: str) -> bool:
+        """Je to přihlášená stránka svozového kalendáře?
+
+        Nestačí hledat data-events: účet, který zatím nic nesleduje, kalendář
+        se svozy nemá, a přitom ho přidat jde - harmonogramy se vybírají
+        právě v průvodci. Proto stačí i karty harmonogramů bez přihlašovacího
+        formuláře.
+        """
+        if RE_EVENTS.search(body):
+            return True
+        if RE_SIGNIN.search(body):
+            return False
+        return bool(RE_SUBSCRIBE.search(body) or RE_UNSUBSCRIBE.search(body))
 
     async def async_fetch_collected(self, page_size: int = 20) -> str:
         """Stáhnout první stránku nástěnky, tedy nejnovější odevzdání.
