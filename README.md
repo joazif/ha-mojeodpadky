@@ -330,10 +330,11 @@ ne každý den znovu.
   letopočet v názvu přitom ignoruje. Když nástupce nenajde, napíše to
   do logu a nechá to na tobě.
 - Když nástěnka selže, senzory svozů jedou dál.
-- V diagnostice je pro každou komoditu **Plast odevzdáno 26** atd. —
-  kolikrát se v probíhajícím MESOH roce odevzdala. Číslo za názvem je rok,
-  kdy MESOH rok končí (2025/26 → 26). Roste s každým svozem, 1. října
-  spadne na nulu a číslo v názvu se přepne na další rok.
+- V diagnostice je pro každou komoditu **26 – Plast odevzdáno** atd. —
+  kolikrát se v probíhajícím MESOH roce odevzdala. Číslo na začátku je rok,
+  kdy MESOH rok končí (2025/26 → 26); díky němu drží počty v abecedním
+  řazení pohromadě. Roste s každým svozem, 1. října spadne na nulu a rok
+  v názvu se přepne na další.
 - Ke každé komoditě je navíc **skrytá** entita **EKO body: Plast** — kolik
   bodů dalo poslední odevzdání. Běží a ukládá historii, jen se neukazuje;
   zobrazit ji jde v nastavení entity. Hodí se na hlídání, jestli obec

@@ -341,14 +341,15 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        """„Plast odevzdáno 26" - rok konce MESOH roku, dvoumístně.
+        """„26 – Plast odevzdáno" - rok konce MESOH roku, dvoumístně.
 
         MESOH rok běží od 1. 10. do 30. 9., takže rok 2025/26 je „26".
-        Po 1. říjnu se sám přepne na další, protože bere období ze stránky.
+        Rok je na začátku schválně: HA řadí abecedně, takže počty drží
+        v diagnostice pohromadě. Po 1. říjnu se sám přepne na další.
         """
         rating = self.coordinator.rating
         if rating and rating.period_to:
-            return f"{self.komodita} odevzdáno {rating.period_to.year % 100:02d}"
+            return f"{rating.period_to.year % 100:02d} – {self.komodita} odevzdáno"
         return f"{self.komodita} odevzdáno"
 
     @property
