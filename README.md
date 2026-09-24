@@ -111,6 +111,7 @@ ať je vidět, že se trefila.
 | `sensor.<obec>_vyuziti_systemu` | `30.3 %` | `body`, `maximum` |
 | `sensor.<obec>_objem_na_osobu` | `5753 l` | `smesny_l`, `tridene_l`, `obdobi_od`, `obdobi_do` |
 | `sensor.<obec>_osob_na_stanovisti` | `4 osob` | — |
+| `sensor.<obec>_eko_body_<komodita>` | `3,4 bodů` | `datum`, `nadoba` — v diagnostice |
 | `sensor.<obec>_konec_mesoh_roku` | `30. 9. 2026` | `zacatek`, `zbyva_dni` |
 | `sensor.<obec>_do_konce_mesoh_roku` | `6 dní` | `konec`, `konec_text` |
 | `sensor.<obec>_posledni_uspesna_aktualizace` | `20.09.2026 23:18` | `cas`, `posledni_pokus_uspesny` |
@@ -328,6 +329,11 @@ ne každý den znovu.
   letopočet v názvu přitom ignoruje. Když nástupce nenajde, napíše to
   do logu a nechá to na tobě.
 - Když nástěnka selže, senzory svozů jedou dál.
+- V diagnostice je pro každou komoditu entita **EKO body: Plast** atd. —
+  kolik bodů dalo poslední odevzdání. Při každém stažení se hledá nejnovější
+  záznam na nástěnce i v podrobné tabulce hodnocení (celý MESOH rok), takže
+  se objeví i komodity, které se odevzdávají jen párkrát do roka. Je to číslo,
+  po kliknutí je graf; kdyby obec bodování změnila, bude to v něm vidět.
 - Senzory, jejichž stav závisí na dnešku (Dnes / Zítra, dny do konce MESOH
   roku), se přepočítají po půlnoci samy, nečekají na další stažení dat.
 

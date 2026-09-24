@@ -23,6 +23,7 @@ from .api import (
     diff_collected,
     find_successor,
     fingerprint,
+    latest_points,
     page_text,
 )
 from .const import (
@@ -53,6 +54,8 @@ class MojeOdpadkyData:
     fee: Fee | None = None
     score: Score | None = None
     rating: Rating | None = None
+    # Body za poslední odevzdání každé komodity: {"Plast": záznam, ...}
+    points: dict[str, CollectedItem] = field(default_factory=dict)
 
 
 class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
@@ -86,6 +89,9 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         # Hodnocení stanoviště má 0,7 MB a mění se, jen když přibude svoz.
         # Stahuje se proto po novém záznamu, nebo nejvýš jednou za den.
         self._heavy_at: datetime | None = None
+        # Záznamy za celý MESOH rok z hodnocení; drží se mezi obnoveními,
+        # protože se hodnocení nestahuje pokaždé.
+        self._year_records: list[CollectedItem] = []
 
     async def _async_update_data(self) -> MojeOdpadkyData:
         # Kalendář se stahuje jednou a stránka se pak podává dál; dřív si ji
@@ -134,6 +140,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         )
         rating, people = await self._async_heavy_pages(bool(nove))
         self._fire_new_collected(nove)
+        points = self._latest_points(collected)
 
         self.last_success = dt_now()
 
@@ -147,6 +154,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             fee=fee,
             score=score,
             rating=rating,
+            points=points,
         )
 
     async def _async_collected(
@@ -320,7 +328,30 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             _LOGGER.debug("Hodnocení stanoviště se nepodařilo stáhnout: %s", err)
             return self.data.rating if self.data else None
 
+        # Když se stránka stahuje, vezmou se z ní i záznamy za celý rok -
+        # je to jediný zdroj bodů u komodit, které se odevzdávají zřídka.
+        zaznamy = self.client.parse_rating_records(body)
+        if zaznamy:
+            self._year_records = zaznamy
         return self.client.parse_rating(body)
+
+    def _latest_points(
+        self, collected: list[CollectedItem]
+    ) -> dict[str, CollectedItem]:
+        """Body za poslední odevzdání každé komodity.
+
+        Nejnovější záznam se hledá při každém obnovení na nástěnce (nejčerstvější
+        data) i v záznamech za celý rok (komodity, které v posledních dvaceti
+        nejsou). Komodita, která ze stránek zmizí - třeba po začátku nového
+        MESOH roku - si drží poslední známou hodnotu, ať graf nespadne do prázdna.
+        """
+        nove = latest_points(collected, self._year_records)
+        dosavadni = dict(self.data.points) if self.data else {}
+        for komodita, item in nove.items():
+            stary = dosavadni.get(komodita)
+            if stary is None or item.day >= stary.day:
+                dosavadni[komodita] = item
+        return dosavadni
 
     def _fire_new_collected(self, nove: list[CollectedItem]) -> None:
         """Vyvolat událost pro každý záznam, který na nástěnce přibyl."""

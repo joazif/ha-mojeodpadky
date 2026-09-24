@@ -254,6 +254,23 @@ check("objem bez rozpadu",
       MojeOdpadkyClient.parse_rating("Celkový obsloužený objem/osoba 900 litrů").volume_person,
       900.0)
 
+print("body za komodity")
+rok = MojeOdpadkyClient.parse_rating_records(HODNOCENI)
+check("zaznamy za rok z podrobne tabulky", len(rok), 4)
+check("nejnovejsi prvni", rok[0].day, date(2026, 9, 16))
+check("body se ctou ze sloupce EKO body", rok[0].points, "3,4")
+check("desetinna carka", _api.points_value(rok[0]), 3.4)
+check("nesmysl neni cislo",
+      _api.points_value(CollectedItem(date(2026, 1, 1), "Plast", "x", "-")), None)
+nejnovejsi = _api.latest_points(collected, rok)
+check("olej jen z rocni tabulky", nejnovejsi["Jedlý olej a tuk"].day, date(2025, 12, 18))
+check("plast z nejnovejsiho zaznamu", nejnovejsi["Plast"].day, date(2026, 9, 16))
+check("nastenka ma prednost pri stejnem datu",
+      _api.latest_points([CollectedItem(date(2026, 9, 16), "Plast", "nastenka", "3")],
+                         [CollectedItem(date(2026, 9, 16), "Plast", "rok", "3,4")]
+                         )["Plast"].container, "nastenka")
+check("stranka bez tabulky", MojeOdpadkyClient.parse_rating_records("<html></html>"), [])
+
 print("parse_people")
 check("pocet osob z inventury", MojeOdpadkyClient.parse_people(INVENTURA), 4)
 check("nespletl si poplatniky",

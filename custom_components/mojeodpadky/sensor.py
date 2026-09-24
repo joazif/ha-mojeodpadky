@@ -26,6 +26,7 @@ from .const import (
     ATTR_TYPES,
     ATTR_WASTE_TYPE,
 )
+from .api import points_value
 from .coordinator import MojeOdpadkyCoordinator, dt_today
 from .entity import MojeOdpadkyEntity
 from .texts import relative_future, relative_past
@@ -89,6 +90,25 @@ async def async_setup_entry(
 
     _add_new_types()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_types))
+
+    known_points: set[str] = set()
+
+    @callback
+    def _add_new_points() -> None:
+        # Komodity přibývají, jak se na stránkách objevují; olej nebo
+        # elektro třeba jen párkrát do roka.
+        komodity = coordinator.data.points if coordinator.data else {}
+        nove = [
+            CommodityPointsSensor(coordinator, entry.entry_id, komodita)
+            for komodita in komodity
+            if komodita not in known_points
+        ]
+        if nove:
+            known_points.update(sensor.komodita for sensor in nove)
+            async_add_entities(nove)
+
+    _add_new_points()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_points))
 
     async_add_entities(entities)
 
@@ -234,6 +254,50 @@ class FeeSensor(MojeOdpadkyEntity, SensorEntity):
             "sazba": fee.rate,
             "uleva": fee.discount,
             "uleva_procent": fee.discount_percent,
+        }
+
+
+class CommodityPointsSensor(MojeOdpadkyEntity, SensorEntity):
+    """Kolik EKO bodů dala komodita za poslední odevzdání.
+
+    Číselná hodnota se state_class, takže po kliknutí je graf a změna
+    bodování (obec to může během roku upravit) bude vidět v historii.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_native_unit_of_measurement = "bodů"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: MojeOdpadkyCoordinator, entry_id: str, komodita: str
+    ) -> None:
+        super().__init__(coordinator, entry_id)
+        self.komodita = komodita
+        self._attr_name = f"EKO body: {komodita}"
+        self._attr_unique_id = f"{entry_id}_points_{_slug(komodita)}"
+        self._attr_icon = ICONS.get(komodita, "mdi:star-circle-outline")
+
+    @property
+    def _zaznam(self):
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.points.get(self.komodita)
+
+    @property
+    def native_value(self) -> float | None:
+        """Body za poslední odevzdání této komodity."""
+        zaznam = self._zaznam
+        return points_value(zaznam) if zaznam else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Z kterého odevzdání ta hodnota je."""
+        zaznam = self._zaznam
+        if not zaznam:
+            return {}
+        return {
+            ATTR_DATE: zaznam.day.isoformat(),
+            ATTR_CONTAINER: zaznam.container,
         }
 
 

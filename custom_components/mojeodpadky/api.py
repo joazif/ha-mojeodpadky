@@ -289,6 +289,31 @@ def page_text(body: str) -> str:
     )
 
 
+def points_value(item: CollectedItem) -> float | None:
+    """EKO body záznamu jako číslo; "3,4" i "3.4" -> 3.4, nesmysl -> None."""
+    try:
+        return float(item.points.replace(",", ".").replace(" ", ""))
+    except (AttributeError, ValueError):
+        return None
+
+
+def latest_points(*zdroje: list[CollectedItem]) -> dict[str, CollectedItem]:
+    """Nejnovější záznam s čitelnými body pro každou komoditu.
+
+    Zdrojů může být víc (nástěnka má posledních 20 záznamů, hodnocení celý
+    MESOH rok). Při stejném datu vyhrává dřívější zdroj, tedy nástěnka.
+    """
+    vysledek: dict[str, CollectedItem] = {}
+    for zdroj in zdroje:
+        for item in zdroj:
+            if not item.waste_type or points_value(item) is None:
+                continue
+            dosavadni = vysledek.get(item.waste_type)
+            if dosavadni is None or item.day > dosavadni.day:
+                vysledek[item.waste_type] = item
+    return vysledek
+
+
 def fingerprint(item: Schedule) -> str:
     """Otisk harmonogramu, který přežije přelom roku.
 
@@ -936,6 +961,56 @@ class MojeOdpadkyClient:
             period_from=_parse_cz_date(obdobi.group(1)) if obdobi else None,
             period_to=_parse_cz_date(obdobi.group(2)) if obdobi else None,
         )
+
+    @staticmethod
+    def parse_rating_records(body: str) -> list[CollectedItem]:
+        """Záznamy za celý MESOH rok z podrobné tabulky Hodnocení stanoviště.
+
+        Sloupce: Datum | Komodita | Označení nádoby | Typ nádoby | Objem |
+        Hmotnost | EKO body | Plnost | Čistota | Poznámka. Na stránce je
+        čtrnáct tabulek; ta správná je jediná s plností i čistotou.
+        """
+        for table in RE_TABLE.findall(body):
+            table_rows = RE_ROW.findall(table)
+            if not table_rows:
+                continue
+            header = _cell_text(table_rows[0]).lower()
+            if not (
+                "datum" in header
+                and "komodita" in header
+                and "eko" in header
+                and "plnost" in header
+            ):
+                continue
+
+            hlavicka = [
+                _cell_text(cell).lower() for cell in RE_CELL.findall(table_rows[0])
+            ]
+            sloupec_bodu = next(
+                (i for i, nazev in enumerate(hlavicka) if "eko" in nazev), None
+            )
+            if sloupec_bodu is None:
+                return []
+
+            items: list[CollectedItem] = []
+            for row in table_rows[1:]:
+                cells = [_cell_text(cell) for cell in RE_CELL.findall(row)]
+                if len(cells) <= sloupec_bodu or not RE_CZ_DATE.match(cells[0]):
+                    continue
+                day = _parse_cz_date(cells[0].replace(" ", ""))
+                if day is None:
+                    continue
+                items.append(
+                    CollectedItem(
+                        day=day,
+                        waste_type=cells[1],
+                        container=cells[2],
+                        points=cells[sloupec_bodu],
+                    )
+                )
+            items.sort(key=lambda item: item.day, reverse=True)
+            return items
+        return []
 
     @staticmethod
     def parse_score(body: str, text: str | None = None) -> Score | None:
