@@ -15,6 +15,7 @@ from homeassistant.util import slugify
 from .api import InvalidAuth, MojeOdpadkyClient, MojeOdpadkyError
 from .const import (
     CONF_SCAN_INTERVAL,
+    DOMAIN,
     CONF_SCHEDULES,
     CONF_SLUG,
     DEFAULT_SCAN_INTERVAL_HOURS,
@@ -143,6 +144,16 @@ async def async_unload_entry(
     if unloaded:
         await entry.runtime_data.client.async_close()
     return unloaded
+
+
+async def async_remove_entry(
+    hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
+) -> None:
+    """Při smazání služby uklidit uložený stav (výběr a naposledy vídané záznamy)."""
+    from homeassistant.helpers.storage import Store
+
+    for suffix in ("selection", "collected"):
+        await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_{suffix}").async_remove()
 
 
 async def async_reload_entry(

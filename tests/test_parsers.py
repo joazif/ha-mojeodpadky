@@ -405,6 +405,21 @@ check("prvni stazeni mlci", diff_collected([], collected), [])
 check("vypadek nastenky nic nehlasi", diff_collected(minule, []), [])
 check("kratsi seznam nic nehlasi", diff_collected(minule, minule[:3]), [])
 
+print("ulozeni videnych zaznamu")
+CollectedItem = _api.CollectedItem
+ulozeno = _api.collected_to_json(collected)
+check("zaznamy se po ulozeni vrati stejne",
+      [i.key for i in _api.collected_from_json(ulozeno)], [i.key for i in collected])
+check("rozbity zaznam se preskoci",
+      len(_api.collected_from_json([["2026-09-19", "Papír", "1A"], ["blbost"], None,
+                                    ["neni-datum", "x", "y"]])), 1)
+check("neco jineho nez seznam je prazdny seznam",
+      _api.collected_from_json({"a": 1}), [])
+check("po restartu se ohlasi jen to, co prislo za dobu vypadku",
+      diff_collected(_api.collected_from_json(ulozeno), [novy] + collected), [novy])
+check("po restartu bez zmeny nic nehlasi",
+      diff_collected(_api.collected_from_json(ulozeno), collected), [])
+
 print("popisky stavu")
 check("dnes", _texts.relative_future(0), "Dnes")
 check("zitra", _texts.relative_future(1), "Zítra")

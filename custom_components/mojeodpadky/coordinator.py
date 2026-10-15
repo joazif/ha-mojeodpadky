@@ -23,6 +23,8 @@ from .api import (
     Score,
     count_by_type,
     current_period,
+    collected_from_json,
+    collected_to_json,
     diff_collected,
     find_successor,
     fingerprint,
@@ -97,6 +99,11 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         # na disku, aby po restartu nevypadal cizí stav webu jako změna.
         self._store: Store = Store(hass, 1, f"{DOMAIN}_{entry_id}_selection")
         self._applied: set[int] | None = None
+        # Naposledy vídané záznamy nástěnky. Drží se na disku, aby po restartu
+        # Home Assistantu šlo poznat i záznamy, které přibyly, zatímco neběžel,
+        # a aby se neohlašovaly znovu ty, které už se ohlásily.
+        self._seen_store: Store = Store(hass, 1, f"{DOMAIN}_{entry_id}_collected")
+        self._seen: list[CollectedItem] | None = None
         # Otisky vybraných harmonogramů pro přelom roku: {id: "papír|nová"}
         self._fingerprints: dict[int, str] = {}
         self.last_success: datetime | None = None
@@ -154,11 +161,15 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
 
         # Rozdíl se počítá jednou: řekne, jestli se vyplatí sáhnout
         # na velké stránky, a zároveň co ohlásit automatizacím.
-        nove = (
-            diff_collected(self.data.collected, collected) if self.data else []
+        predchozi = (
+            self.data.collected
+            if self.data and self.data.collected
+            else await self._async_seen()
         )
+        nove = diff_collected(predchozi, collected)
         rating, people = await self._async_heavy_pages(bool(nove))
         self._fire_new_collected(nove)
+        await self._async_remember_seen(collected)
         points = self._latest_points(collected)
         period = current_period(self._periods, dt_today())
         year_counts = await self._async_period_counts(period, bool(nove))
@@ -458,6 +469,24 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             if stary is None or item.day >= stary.day:
                 dosavadni[komodita] = item
         return dosavadni
+
+    async def _async_seen(self) -> list[CollectedItem]:
+        """Záznamy, které integrace viděla naposledy (i před restartem)."""
+        if self._seen is None:
+            ulozeno = await self._seen_store.async_load() or {}
+            self._seen = collected_from_json(ulozeno.get("collected"))
+        return self._seen
+
+    async def _async_remember_seen(self, collected: list[CollectedItem]) -> None:
+        """Uložit aktuální záznamy; výpadek nástěnky (prázdný seznam) se nezapisuje."""
+        if not collected:
+            return
+        klice = [item.key for item in collected]
+        videne = await self._async_seen()
+        if klice == [item.key for item in videne]:
+            return
+        self._seen = list(collected)
+        await self._seen_store.async_save({"collected": collected_to_json(collected)})
 
     def _fire_new_collected(self, nove: list[CollectedItem]) -> None:
         """Vyvolat událost pro každý záznam, který na nástěnce přibyl."""

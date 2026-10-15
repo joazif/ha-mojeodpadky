@@ -317,7 +317,9 @@ automation:
 ```
 
 Upozornění na nový záznam v nástěnce. Událost se vyvolá pro každé odevzdání,
-které přibylo od minulého obnovení; při prvním stažení mlčí:
+které přibylo od minulého obnovení. Co už integrace viděla, si pamatuje i přes restart
+Home Assistantu, takže se nic neohlásí dvakrát a naopak se po restartu ohlásí i to, co přibylo,
+zatímco Home Assistant neběžel. Hned po instalaci (nemá s čím srovnávat) mlčí:
 
 ```yaml
 automation:

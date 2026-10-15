@@ -455,6 +455,25 @@ def diff_collected(
     return result
 
 
+def collected_to_json(items: list[CollectedItem]) -> list[list[str]]:
+    """Záznamy v podobě pro uložení na disk: ``[datum, komodita, nádoba]``."""
+    return [[item.day.isoformat(), item.waste_type, item.container] for item in items]
+
+
+def collected_from_json(data: object) -> list[CollectedItem]:
+    """Opak ``collected_to_json``; co nejde přečíst, se přeskočí."""
+    result: list[CollectedItem] = []
+    if not isinstance(data, list):
+        return result
+    for row in data:
+        try:
+            day, waste_type, container = row
+            result.append(CollectedItem(date.fromisoformat(day), str(waste_type), str(container)))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 class MojeOdpadkyClient:
     """Klient držící přihlášenou session."""
 
