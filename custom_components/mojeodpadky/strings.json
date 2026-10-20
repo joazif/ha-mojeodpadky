@@ -40,7 +40,7 @@
     "step": {
       "init": {
         "title": "Výběr harmonogramů",
-        "description": "Zaškrtnuté harmonogramy bude integrace sledovat na webu za vás. Odškrtnutí harmonogram na webu odhlásí.",
+        "description": "Zaškrtnuté je to, co je teď na webu přihlášené. Zaškrtnutí harmonogram na webu přihlásí, odškrtnutí odhlásí.",
         "data": {
           "schedules": "Harmonogramy",
           "scan_interval_hours": "Jak často stahovat data"

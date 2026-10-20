@@ -10,14 +10,31 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import slugify
 
 from . import MojeOdpadkyConfigEntry
-from .api import MojeOdpadkyError, Schedule, fingerprint, notification_name
+from .api import MojeOdpadkyError, Schedule, fingerprint, schedule_waste_type
 from .const import DOMAIN
 from .coordinator import MojeOdpadkyCoordinator
 from .entity import MojeOdpadkyEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# Letopočet v entity_id přepínače ze starší verze ("..._2027").
+RE_ROK = re.compile(r"(?:^|_)(?:19|20)\d{2,3}(?:_|$)")
+
+
+def _komodity(coordinator: MojeOdpadkyCoordinator) -> dict[str, list[Schedule]]:
+    """Sledované harmonogramy podle komodity: {"papír, plast": [...]}."""
+    data = coordinator.data
+    if not data:
+        return {}
+    skupiny: dict[str, list[Schedule]] = {}
+    for item in data.schedules:
+        if item.subscribed:
+            komodita = schedule_waste_type(item, data.events)
+            skupiny.setdefault(komodita.lower(), []).append(item)
+    return skupiny
 
 
 async def async_setup_entry(
@@ -27,61 +44,116 @@ async def async_setup_entry(
 ) -> None:
     """Vytvořit přepínač pro každou sledovanou komoditu."""
     coordinator = entry.runtime_data
-    _prevest_stare_prepinace(hass, entry.entry_id, coordinator)
+    _prevest_stare_prepinace(hass, entry, coordinator)
     known: set[str] = set()
+    predpona = f"{entry.entry_id}_notify_"
 
     @callback
-    def _add_new() -> None:
-        nove: dict[str, NotificationSwitch] = {}
-        for item in coordinator.data.schedules if coordinator.data else []:
-            otisk = fingerprint(item)
-            if item.subscribed and otisk not in known and otisk not in nove:
-                nove[otisk] = NotificationSwitch(coordinator, entry.entry_id, otisk)
-        if nove:
-            known.update(nove)
-            async_add_entities(nove.values())
+    def _sync() -> None:
+        if not coordinator.data or not coordinator.last_update_success:
+            return
+        skupiny = _komodity(coordinator)
 
-    _add_new()
-    entry.async_on_unload(coordinator.async_add_listener(_add_new))
+        nove = [
+            NotificationSwitch(coordinator, entry.entry_id, klic)
+            for klic in skupiny
+            if klic not in known
+        ]
+        if nove:
+            known.update(prepinac.klic for prepinac in nove)
+            async_add_entities(nove)
+
+        # Komodita, kterou už žádný sledovaný harmonogram nemá (loňský ročník
+        # zmizel z webu, odběr se zrušil), by zůstala viset jako nedostupná.
+        # Stránka bez jediného harmonogramu je spíš chyba čtení než skutečnost
+        # - pak se nic nemaže.
+        if not coordinator.data.schedules:
+            return
+        registr = er.async_get(hass)
+        for zaznam in er.async_entries_for_config_entry(registr, entry.entry_id):
+            unique_id = zaznam.unique_id or ""
+            if zaznam.domain != "switch" or not unique_id.startswith(predpona):
+                continue
+            klic = unique_id[len(predpona):]
+            if klic not in skupiny:
+                known.discard(klic)
+                registr.async_remove(zaznam.entity_id)
+                _LOGGER.debug("Odstraněn přepínač %s bez harmonogramu", zaznam.entity_id)
+
+    _sync()
+    entry.async_on_unload(coordinator.async_add_listener(_sync))
 
 
 def _prevest_stare_prepinace(
-    hass: HomeAssistant, entry_id: str, coordinator: MojeOdpadkyCoordinator
+    hass: HomeAssistant,
+    entry: MojeOdpadkyConfigEntry,
+    coordinator: MojeOdpadkyCoordinator,
 ) -> None:
-    """Přepínače ze starších instalací měly v unique_id ID harmonogramu.
+    """Převést přepínače ze starších verzí na klíč podle komodity.
 
-    To se mění s každým novým ročníkem harmonogramu, takže by po přelomu
-    roku vznikl nový přepínač a starý zůstal viset jako nedostupný. Tady
-    se převedou na otisk komodity; entity_id i historie zůstanou.
+    Starší verze je klíčovaly ID harmonogramu (to se mění každý rok) a pak
+    "komoditou a místní částí" vyčtenou z názvu - jenže nové harmonogramy
+    obec píše celé velkými písmeny a z názvu se komodita poznat nedá.
+    Převod proběhne jen u přepínačů ve starém tvaru; když na jednu komoditu
+    připadne víc starých, zůstane jeden. Entity_id s letopočtem se při tom
+    jednou přejmenuje na čisté, když je volné.
     """
+    data = coordinator.data
+    if not data:
+        return
+    entry_id = entry.entry_id
+    predpona = f"{entry_id}_notify_"
     registr = er.async_get(hass)
-    vzor = re.compile(rf"^{re.escape(entry_id)}_notify_(\d+)$")
-    podle_id = {
-        item.schedule_id: item
-        for item in (coordinator.data.schedules if coordinator.data else [])
-    }
-    for zaznam in er.async_entries_for_config_entry(registr, entry_id):
-        shoda = vzor.match(zaznam.unique_id or "")
-        if zaznam.domain != "switch" or not shoda:
-            continue
-        item = podle_id.get(int(shoda.group(1)))
-        nove = f"{entry_id}_notify_{fingerprint(item)}" if item else None
-        if nove and not registr.async_get_entity_id("switch", DOMAIN, nove):
-            registr.async_update_entity(zaznam.entity_id, new_unique_id=nove)
-            _LOGGER.debug("Přepínač %s převeden na %s", zaznam.entity_id, nove)
-        else:
+    stare = [
+        zaznam
+        for zaznam in er.async_entries_for_config_entry(registr, entry_id)
+        if zaznam.domain == "switch"
+        and (zaznam.unique_id or "").startswith(predpona)
+        and _je_stary_klic((zaznam.unique_id or "")[len(predpona):])
+    ]
+    if not stare:
+        return
+
+    def komodita_pro(klic: str) -> str | None:
+        for item in data.schedules:
+            if (klic.isdigit() and item.schedule_id == int(klic)) or (
+                not klic.isdigit() and fingerprint(item) == klic
+            ):
+                return schedule_waste_type(item, data.events)
+        return None
+
+    # Přepínače bez letopočtu v entity_id napřed - ty si ID nechají.
+    stare.sort(key=lambda zaznam: bool(RE_ROK.search(zaznam.entity_id)))
+    zarizeni = slugify(entry.title)
+    for zaznam in stare:
+        komodita = komodita_pro((zaznam.unique_id or "")[len(predpona):])
+        nove = f"{predpona}{komodita.lower()}" if komodita else None
+        if not nove or registr.async_get_entity_id("switch", DOMAIN, nove):
             # Harmonogram už na webu není, nebo jeho komoditu už zastupuje
             # jiný přepínač - starý by zůstal navždy nedostupný.
             registr.async_remove(zaznam.entity_id)
             _LOGGER.debug("Odstraněn starý přepínač %s", zaznam.entity_id)
+            continue
+        zmeny: dict = {"new_unique_id": nove}
+        cile = f"switch.{zarizeni}_upozorneni_{slugify(komodita)}"
+        if RE_ROK.search(zaznam.entity_id) and not registr.async_get(cile):
+            zmeny["new_entity_id"] = cile
+        registr.async_update_entity(zaznam.entity_id, **zmeny)
+        _LOGGER.debug("Přepínač %s převeden na %s", zaznam.entity_id, nove)
+
+
+def _je_stary_klic(klic: str) -> bool:
+    """ID harmonogramu, nebo otisk "komodita|místní část" ze starší verze."""
+    return klic.isdigit() or "|" in klic
 
 
 class NotificationSwitch(MojeOdpadkyEntity, SwitchEntity):
     """E-mailová upozornění jedné komodity, jako tlačítko na webu.
 
-    Nepatří konkrétnímu harmonogramu, ale komoditě v místní části. Nový
-    ročník harmonogramu tak ovládá pořád stejný přepínač; když jsou chvíli
-    sledované oba ročníky, přepíná se u obou.
+    Nepatří konkrétnímu harmonogramu, ale komoditě tak, jak ji web píše u
+    svozů ("Bio", "Papír, Plast"). Nový ročník harmonogramu tak ovládá
+    pořád stejný přepínač; když jsou chvíli sledované oba ročníky (nebo dva
+    harmonogramy téže komodity), přepíná se u všech.
     """
 
     _attr_icon = "mdi:email-alert-outline"
@@ -90,35 +162,29 @@ class NotificationSwitch(MojeOdpadkyEntity, SwitchEntity):
         self,
         coordinator: MojeOdpadkyCoordinator,
         entry_id: str,
-        otisk: str,
+        klic: str,
     ) -> None:
         super().__init__(coordinator, entry_id)
-        self.otisk = otisk
-        self._attr_unique_id = f"{entry_id}_notify_{otisk}"
+        self.klic = klic
+        self._attr_unique_id = f"{entry_id}_notify_{klic}"
 
     @property
     def _schedules(self) -> list[Schedule]:
         """Sledované harmonogramy této komodity, nejnovější první."""
         return sorted(
-            (
-                item
-                for item in (
-                    self.coordinator.data.schedules if self.coordinator.data else []
-                )
-                if item.subscribed and fingerprint(item) == self.otisk
-            ),
+            _komodity(self.coordinator).get(self.klic, []),
             key=lambda item: item.schedule_id,
             reverse=True,
         )
 
     @property
     def name(self) -> str:
-        """Krátce, jen komodita, případně s místní částí."""
+        """Jen komodita, jak ji píše web: "Upozornění: Papír, Plast"."""
         sledovane = self._schedules
         if not sledovane:
             return "Upozornění"
-        return "Upozornění: " + notification_name(
-            sledovane[0], self.coordinator.data.schedules
+        return "Upozornění: " + schedule_waste_type(
+            sledovane[0], self.coordinator.data.events
         )
 
     @property

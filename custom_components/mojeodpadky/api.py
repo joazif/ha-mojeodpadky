@@ -427,23 +427,24 @@ def find_successor(
     return None
 
 
-def notification_name(item: Schedule, schedules: list[Schedule]) -> str:
-    """Krátký název přepínače upozornění: "Papír", "Bioodpad Záhoří".
+def schedule_waste_type(item: Schedule, events: list[CollectionEvent]) -> str:
+    """Komodita harmonogramu tak, jak ji web píše u jeho svozů.
 
-    Přepínač patří komoditě v místní části (viz ``fingerprint``), ne
-    jednomu harmonogramu - ten se každý rok mění a s ním by vznikal nový
-    přepínač. Proto v názvu nikdy není letopočet. Místní část se přidá jen
-    tehdy, když má obec stejnou komoditu i pro jinou část; porovnává se se
-    všemi harmonogramy, ne jen se sledovanými, aby se název neměnil podle
-    toho, co je zrovna zaškrtnuté.
+    Z názvu harmonogramu se spolehlivě vyčíst nedá: obec ho píše jednou
+    "Harmonogram papír JÍLOVÉ + RADLÍK 2026", podruhé celý velkými
+    písmeny "Harmonogram TŘÍDĚNÝ ODPAD JÍLOVÉ + RADLÍK 2027". Svozy v
+    kalendáři ale nesou komoditu přímo ("Papír", "Papír, Plast") i název
+    harmonogramu, ke kterému patří. Harmonogram bez svozů (web je posílá
+    jen u sledovaných) spadne na odhad z názvu.
     """
-    otisk = fingerprint(item)
-    stejne = any(
-        other.short_name == item.short_name and fingerprint(other) != otisk
-        for other in schedules
+    jmeno = " ".join(item.name.split())
+    pocty = Counter(
+        event.waste_type
+        for event in events
+        if event.waste_type and event.schedule_name == jmeno
     )
-    if stejne and item.area and item.area.lower() not in item.short_name.lower():
-        return f"{item.short_name} {item.area}"
+    if pocty:
+        return pocty.most_common(1)[0][0]
     return item.short_name
 
 
@@ -1238,9 +1239,13 @@ class MojeOdpadkyClient:
         if body is None:
             body = await self.async_fetch_page()
         email = self.parse_default_email(body)
-        current = {s.schedule_id for s in self.parse_schedules(body) if s.subscribed}
+        harmonogramy = self.parse_schedules(body)
+        current = {s.schedule_id for s in harmonogramy if s.subscribed}
 
-        to_add = wanted - current
+        # Jen harmonogramy, které na webu jsou: loňský ročník bez nástupce
+        # zůstává ve výběru, a bez tohohle by se ho integrace při každém
+        # obnovení pokoušela přihlásit znovu.
+        to_add = (wanted & {s.schedule_id for s in harmonogramy}) - current
         to_remove = current - wanted
 
         if not wanted and current:

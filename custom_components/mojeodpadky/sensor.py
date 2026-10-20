@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import MojeOdpadkyConfigEntry
@@ -52,6 +53,15 @@ ICONS = {
 }
 
 
+def _ikona(komodita: str, vychozi: str) -> str:
+    """Ikona komodity; společný svoz víc komodit ("Papír, Plast") je tříděný."""
+    if komodita in ICONS:
+        return ICONS[komodita]
+    if "," in komodita:
+        return "mdi:recycle"
+    return vychozi
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: MojeOdpadkyConfigEntry,
@@ -78,17 +88,53 @@ async def async_setup_entry(
         PeopleSensor(coordinator, entry.entry_id),
     ]
     known: set[str] = set()
+    # Pevné senzory a počty mají vlastní unique_id; všechno ostatní z této
+    # služby v doméně sensor jsou senzory svozů komodit ({entry_id}_<komodita>).
+    pevne = {sensor.unique_id for sensor in entities}
+    pocty = f"{entry.entry_id}_count_"
 
     @callback
     def _add_new_types() -> None:
+        # Jen komodity, které mají ještě nějaký svoz. Komodita, kterou obec
+        # přestala svážet (papír a plast zvlášť nahradil společný svoz), by
+        # jinak navždy ukazovala "Neznámý"; senzor zmizí a vrátí se sám,
+        # až se svozy objeví znovu (třeba bioodpad na jaře).
+        if not coordinator.data or not coordinator.last_update_success:
+            return
+        aktualni = {
+            waste_type: _slug(waste_type)
+            for waste_type in coordinator.waste_types
+            if coordinator.next_event(waste_type) is not None
+        }
         new = [
             WasteTypeSensor(coordinator, entry.entry_id, waste_type)
-            for waste_type in coordinator.waste_types
+            for waste_type in aktualni
             if waste_type not in known
         ]
         if new:
             known.update(sensor.waste_type for sensor in new)
             async_add_entities(new)
+
+        # Bez jediného svozu jde spíš o chybu čtení kalendáře - nic se nemaže.
+        if not coordinator.data.events:
+            return
+        platne = {f"{entry.entry_id}_{slug}" for slug in aktualni.values()}
+        registr = er.async_get(hass)
+        for zaznam in er.async_entries_for_config_entry(registr, entry.entry_id):
+            unique_id = zaznam.unique_id or ""
+            if (
+                zaznam.domain != "sensor"
+                or unique_id in pevne
+                or unique_id in platne
+                or unique_id.startswith(pocty)
+            ):
+                continue
+            registr.async_remove(zaznam.entity_id)
+            known.difference_update(
+                waste_type
+                for waste_type in list(known)
+                if f"{entry.entry_id}_{_slug(waste_type)}" == unique_id
+            )
 
     _add_new_types()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_types))
@@ -171,7 +217,7 @@ class WasteTypeSensor(MojeOdpadkyEntity, SensorEntity):
         self.waste_type = waste_type
         self._attr_name = waste_type
         self._attr_unique_id = f"{entry_id}_{_slug(waste_type)}"
-        self._attr_icon = ICONS.get(waste_type, "mdi:trash-can-outline")
+        self._attr_icon = _ikona(waste_type, "mdi:trash-can-outline")
 
     @property
     def native_value(self) -> str | None:
@@ -301,7 +347,7 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
         super().__init__(coordinator, entry_id)
         self.komodita = komodita
         self._attr_unique_id = f"{entry_id}_count_{_slug(komodita)}"
-        self._attr_icon = ICONS.get(komodita, "mdi:counter")
+        self._attr_icon = _ikona(komodita, "mdi:counter")
         # Jen komodita, bez roku: období ukazuje řádek nad počty. HA u grafu
         # ukazuje aktuální název, takže s rokem by se loňský průběh jmenoval
         # letošním rokem; a ID se po vzniku nemění, rok by zastaral 1. října.

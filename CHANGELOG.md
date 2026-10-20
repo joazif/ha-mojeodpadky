@@ -1,5 +1,32 @@
 # Změny
 
+## 0.1.3 – 2026-10-20
+
+### Opraveno
+
+- Přepínače upozornění u harmonogramů, jejichž název je celý velkými písmeny
+  (třeba „Harmonogram BIO … 2027“, „Harmonogram TŘÍDĚNÝ ODPAD … 2027“), se
+  jmenovaly celým názvem harmonogramu i s rokem. Komodita se teď bere ze
+  svozů v kalendáři, kde ji web píše vždy stejně („Bio“, „Papír, Plast“).
+  Přepínač se jmenuje jen podle ní a víc sledovaných harmonogramů téže
+  komodity ovládá jeden. Přepínače ze starší verze se převedou (entity_id
+  s rokem se jednou přejmenuje) a přepínač komodity, kterou už žádný
+  sledovaný harmonogram nemá, se odstraní.
+- Společný svoz víc komodit („Papír, Plast“) má ikonu recyklace místo
+  popelnice.
+- Senzor svozu komodity, která už nemá žádný další svoz (třeba papír a plast
+  zvlášť po přechodu na společný svoz), zmizí, místo aby ukazoval „Neznámý“.
+  Když se svozy komodity znovu objeví, vrátí se se stejným ID.
+- Nastavení harmonogramů ukazovalo výběr z doby instalace, ne skutečný stav
+  webu. Harmonogramy, které web přihlásil sám (třeba nový ročník), v něm
+  nebyly zaškrtnuté a uložení formuláře po jakékoli změně by je na webu
+  odhlásilo. Teď je zaškrtnuté to, co je na webu opravdu přihlášené.
+- Harmonogram, který z webu zmizel bez nástupce, se z výběru vyřadí, místo
+  aby při každém obnovení psal do logu varování.
+- Harmonogram, který z webu zmizel bez nástupce (loňský ročník komodity, kterou
+  obec od nového roku sváží jinak), se už nepokouší při každém obnovení znovu
+  přihlásit.
+
 ## 0.1.2 – 2026-10-20
 
 ### Přidáno

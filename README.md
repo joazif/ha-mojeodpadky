@@ -116,6 +116,11 @@ Rozdělené tak, jak je ukazuje stránka zařízení.
 Stav senzorů komodit je jen na čtení a mění se každý den. Automatizace se
 proto váže na atributy (`days_to`, `datum`), ne na text.
 
+Senzor komodity existuje, jen dokud má nějaký další svoz. Když obec komoditu
+přestane svážet (třeba papír a plast zvlášť nahradí společný svoz „Papír,
+Plast“), senzor zmizí, místo aby navždy ukazoval „Neznámý“. Jakmile se svozy
+komodity znovu objeví, vrátí se se stejným ID.
+
 Sazba, úleva a procenta jsou atributy poplatku **i samostatné senzory** —
 atributy se do dlouhodobých statistik neukládají, graf by z nich nebyl.
 
@@ -129,11 +134,13 @@ atributy se do dlouhodobých statistik neukládají, graf by z nich nebyl.
 | `button.<obec>_aktualizovat` | stáhne data hned, bez čekání na interval |
 | `switch.<obec>_upozorneni_<komodita>` | e-mailová upozornění z webu pro jednu komoditu |
 
-Přepínač se jmenuje podle komodity („Upozornění: Papír"). Když má obec stejnou
-komoditu pro víc místních částí, přidá se i ta část („Bioodpad Záhoří").
-Letopočet v názvu ani v ID není: přepínač patří komoditě, ne konkrétnímu
-harmonogramu, takže po přechodu na harmonogram nového roku zůstane stejný.
-Když jsou chvíli sledované oba ročníky, přepíná se u obou. Celé názvy jsou
+Přepínač se jmenuje podle komodity tak, jak ji web uvádí u svozů
+(„Upozornění: Papír“, „Upozornění: Papír, Plast“). Komodita se nebere z názvu
+harmonogramu: ten si obec píše každý rok jinak (třeba celý velkými písmeny),
+svozy v kalendáři ji ale nesou vždycky stejně. Letopočet v názvu ani v ID
+není a víc sledovaných harmonogramů téže komodity (starý a nový ročník, dva
+harmonogramy bioodpadu) ovládá jeden přepínač. Když komoditu už žádný
+sledovaný harmonogram nemá, přepínač zmizí. Celé názvy harmonogramů jsou
 v atributu `harmonogram`.
 
 ### Diagnostika
@@ -379,9 +386,14 @@ ne každý den znovu.
   přidaný na webu nechá být a prázdný výběr ignoruje — aby rozejitý stav nebo
   chyba v nastavení neodhlásila odběr, o který nikdo nepřišel dobrovolně.
 - **Přelom roku:** obec vypíše nové harmonogramy s novými ID a staré zmizí.
-  Integrace si u vybraných harmonogramů pamatuje komoditu a místní část,
-  takže výběr sama převede na letošní obdobu. Když nástupce nenajde, napíše
-  to do logu. Přepínače upozornění zůstanou tytéž.
+  Web často sám přihlásí odběratele i na nový ročník. Integrace si u
+  vybraných harmonogramů pamatuje komoditu a místní část a výběr převede na
+  letošní obdobu; harmonogram, který zmizel bez nástupce (obec třeba papír
+  a plast nahradí tříděným odpadem), z výběru vyřadí. Přepínače upozornění
+  i senzory komodit se srovnají samy.
+- **Nastavení ukazuje stav webu.** Ve výběru harmonogramů je zaškrtnuté to,
+  co je na webu opravdu přihlášené (i to, co přihlásil sám web), ne výběr
+  z doby instalace. Odhlásí se jen to, co v něm sám odškrtneš.
 - Po zapnutí e-mailových upozornění se výsledek ověřuje; když server zapne
   upozornění jinde, přepínač to ohlásí jako chybu.
 - **Změněné heslo:** když server uložené heslo odmítne, Home Assistant nabídne

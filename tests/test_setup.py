@@ -156,3 +156,180 @@ async def test_user_agent_reaches_server(hass, aioclient_mock):
     assert await client.async_fetch_town() == "Nová Lhota"
     hlavicky = aioclient_mock.mock_calls[0][3]
     assert hlavicky["User-Agent"] == USER_AGENT
+
+
+async def test_switches_named_by_waste_type(hass, web):
+    """Přepínač na komoditu ze svozů, bez místní části a roku."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    jmena = {s.entity_id: s.name for s in hass.states.async_all("switch")}
+    assert jmena == {
+        "switch.nova_lhota_upozorneni_bio": "Nová Lhota Upozornění: Bio",
+        "switch.nova_lhota_upozorneni_papir": "Nová Lhota Upozornění: Papír",
+        "switch.nova_lhota_upozorneni_plast": "Nová Lhota Upozornění: Plast",
+        "switch.nova_lhota_upozorneni_smesny_odpad": "Nová Lhota Upozornění: Směsný odpad",
+    }, jmena
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_old_switches_converted(hass, web):
+    """Přepínače ze starších verzí se převedou, duplicity a roky uklidí."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    registr = er.async_get(hass)
+    p = f"{entry.entry_id}_notify_"
+
+    def stary(klic, objekt):
+        return registr.async_get_or_create(
+            "switch", DOMAIN, p + klic, suggested_object_id=objekt, config_entry=entry
+        ).entity_id
+
+    papir = stary("papír|nová", "nova_lhota_upozorneni_papir_nova")
+    bio_2027 = stary("bioodpad|nová", "nova_lhota_upozorneni_harmonogram_bio_nova_2027")
+    plast = stary("8004", "nova_lhota_upozorneni_plast_nova")
+    smesny = stary("směsný odpad|", "nova_lhota_upozorneni_smesny_odpad")
+    smesny_dvakrat = stary("8001", "nova_lhota_upozorneni_harmonogram_smesny_odpad_20207")
+    zmizely = stary("sklo|", "nova_lhota_upozorneni_sklo")
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    def uid(entity_id):
+        zaznam = registr.async_get(entity_id)
+        return zaznam.unique_id[len(p):] if zaznam else None
+
+    # Bez roku v ID: ID zůstane, klíč se převede.
+    assert uid(papir) == "papír"
+    assert uid(plast) == "plast"
+    assert uid(smesny) == "směsný odpad"
+    # S rokem v ID: jednou přejmenováno na čisté.
+    assert uid(bio_2027) is None
+    assert uid("switch.nova_lhota_upozorneni_bio") == "bio"
+    # Druhý přepínač téže komodity a harmonogram, který už na webu není.
+    assert uid(smesny_dvakrat) is None
+    assert uid(zmizely) is None
+    zbyle = sorted(
+        z.unique_id[len(p):]
+        for z in er.async_entries_for_config_entry(registr, entry.entry_id)
+        if z.domain == "switch"
+    )
+    assert zbyle == ["bio", "papír", "plast", "směsný odpad"], zbyle
+    assert hass.states.get(papir).name == "Nová Lhota Upozornění: Papír"
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_switch_removed_when_schedule_gone(hass, web):
+    """Komodita bez sledovaného harmonogramu nezůstane viset jako nedostupná."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    for item in coordinator.data.schedules:
+        if item.schedule_id == 8004:
+            item.subscribed = False
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.nova_lhota_upozorneni_plast") is None
+    assert er.async_get(hass).async_get("switch.nova_lhota_upozorneni_plast") is None
+    assert hass.states.get("switch.nova_lhota_upozorneni_papir") is not None
+    # Prázdná stránka (chyba čtení) nemaže nic.
+    schedules = coordinator.data.schedules
+    coordinator.data.schedules = []
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.nova_lhota_upozorneni_papir") is not None
+    coordinator.data.schedules = schedules
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_waste_type_sensor_without_collections_disappears(hass, web):
+    """Komodita bez dalšího svozu nemá viset jako "Neznámý"; vrátí se sama."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registr = er.async_get(hass)
+    coordinator = entry.runtime_data
+    assert hass.states.get("sensor.nova_lhota_papir") is not None
+
+    vsechny = coordinator.data.events
+    coordinator.data.events = [e for e in vsechny if e.waste_type != "Papír"]
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.nova_lhota_papir") is None
+    assert registr.async_get("sensor.nova_lhota_papir") is None
+    # Ostatní komodity, pevné senzory i počty zůstanou.
+    for entity_id in (
+        "sensor.nova_lhota_plast",
+        "sensor.nova_lhota_bio",
+        "sensor.nova_lhota_odevzdano_papir",
+        "sensor.nova_lhota_odevzdano_celkem",
+        "sensor.nova_lhota_obdobi_odevzdani",
+    ):
+        assert registr.async_get(entity_id) is not None, entity_id
+
+    # Prázdný kalendář (chyba čtení) nemaže nic.
+    coordinator.data.events = []
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert registr.async_get("sensor.nova_lhota_plast") is not None
+
+    # Svozy papíru se vrátí -> senzor vznikne znovu se stejným ID.
+    coordinator.data.events = vsechny
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.nova_lhota_papir") is not None
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_options_show_what_is_subscribed_on_web(hass, web):
+    """Formulář ukáže skutečný stav webu, ne výběr z doby instalace.
+
+    Web sám přihlásil další harmonogramy (nový ročník); kdyby tu nebyly
+    zaškrtnuté, uložení formuláře by je na webu odhlásilo.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": ["8001"], "scan_interval_hours": 6}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    vychozi = next(
+        klic.default() for klic in result["data_schema"].schema if klic == "schedules"
+    )
+    assert sorted(vychozi) == ["8001", "8004", "8005", "8006"], vychozi
+    hass.config_entries.options.async_abort(result["flow_id"])
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_vanished_schedule_dropped_from_selection(hass, web, caplog):
+    """Harmonogram, který z webu zmizel bez nástupce, se tiše vyřadí."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": ["8001", "1234"], "scan_interval_hours": 6}
+    )
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.options["schedules"] == ["8001"]
+        assert entry.runtime_data.selected == {8001}
+        # Druhá obnova už nic nehlásí.
+        caplog.clear()
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+        assert "nástupce se nenašel" not in caplog.text
+        assert reload.await_count == 0
+    assert not [r for r in caplog.records if r.levelname == "WARNING" and "mojeodpadky" in r.name]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

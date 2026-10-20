@@ -40,7 +40,7 @@
     "step": {
       "init": {
         "title": "Select schedules",
-        "description": "Selected schedules will be followed on the website for you. Unchecking one unsubscribes it.",
+        "description": "Checked schedules are the ones currently subscribed on the website. Checking a schedule subscribes it there, unchecking unsubscribes it.",
         "data": {
           "schedules": "Schedules",
           "scan_interval_hours": "How often to refresh data"

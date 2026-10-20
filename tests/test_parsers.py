@@ -68,13 +68,10 @@ check("upozorneni zapnuta jen u prvniho",
 check("nesledovany nema upozorneni",
       any(s.notifications for s in schedules if not s.subscribed), False)
 
-print("nazev prepinace upozorneni")
+print("komodita harmonogramu pro prepinace upozorneni")
 Schedule = _api.Schedule
-notification_name = _api.notification_name
-
-
-def _nazev(item, sada):
-    return f"Upozornění: {notification_name(item, sada)}"
+CollectionEvent = _api.CollectionEvent
+schedule_waste_type = _api.schedule_waste_type
 
 
 def _sada(*nazvy):
@@ -82,40 +79,60 @@ def _sada(*nazvy):
             for i, n in enumerate(nazvy)]
 
 
-mistni = _sada("Harmonogram bioodpad NOVÁ LHOTA A OSTATNÍ ČÁSTI 2026",
-               "Harmonogram bioodpad ZÁHOŘÍ 2026")
-check("mistni cast velkymi pismeny", [_nazev(x, mistni) for x in mistni],
-      ["Upozornění: Bioodpad Nová", "Upozornění: Bioodpad Záhoří"])
+# Obec píše nové ročníky celé velkými písmeny, papír a plast sváží
+# dohromady a do roku se sekne. Komodita se proto bere ze svozů.
+rocnik_2027 = _sada("Harmonogram BIO NOVÁ LHOTA + OSTATNÍ ČÁSTI 2027",
+                    "Harmonogram BIO NOVÁ LHOTA + OSTATNÍ ČÁSTI 2 2027",
+                    "Harmonogram TŘÍDĚNÝ ODPAD NOVÁ LHOTA + ZÁHOŘÍ 2027",
+                    "Harmonogram směsný odpad 20207",
+                    "Harmonogram plast  NOVÁ LHOTA + ZÁHOŘÍ 2026",
+                    "Harmonogram bioodpad NOVÁ LHOTA A OSTATNÍ ČÁSTI 2026")
+svozy_2027 = [
+    CollectionEvent(date(2027, 1, 4), "Bio", "Harmonogram BIO NOVÁ LHOTA + OSTATNÍ ČÁSTI 2027"),
+    CollectionEvent(date(2027, 1, 11), "Bio", "Harmonogram BIO NOVÁ LHOTA + OSTATNÍ ČÁSTI 2 2027"),
+    CollectionEvent(date(2027, 1, 5), "Papír, Plast", "Harmonogram TŘÍDĚNÝ ODPAD NOVÁ LHOTA + ZÁHOŘÍ 2027"),
+    CollectionEvent(date(2027, 1, 6), "Směsný odpad", "Harmonogram směsný odpad 20207"),
+    # Ve svozech je název harmonogramu s jednou mezerou, na kartě se dvěma.
+    CollectionEvent(date(2026, 10, 27), "Plast", "Harmonogram plast NOVÁ LHOTA + ZÁHOŘÍ 2026"),
+    CollectionEvent(date(2026, 10, 28), "Bio", "Harmonogram bioodpad NOVÁ LHOTA A OSTATNÍ ČÁSTI 2026"),
+]
+check("komodita ze svozu i u nazvu velkymi pismeny",
+      [schedule_waste_type(x, svozy_2027) for x in rocnik_2027],
+      ["Bio", "Bio", "Papír, Plast", "Směsný odpad", "Plast", "Bio"])
+check("stary a novy rocnik bia je jedna komodita",
+      {schedule_waste_type(x, svozy_2027) for x in rocnik_2027 if "BIO" in x.name.upper()},
+      {"Bio"})
+check("harmonogram bez svozu spadne na odhad z nazvu",
+      schedule_waste_type(_sada("Harmonogram papír NOVÁ LHOTA + ZÁHOŘÍ 2026")[0], []),
+      "Papír")
+check("svozy jineho harmonogramu se nepocitaji",
+      schedule_waste_type(_sada("Harmonogram sklo 2027")[0], svozy_2027),
+      "Sklo")
 
 rocniky = _sada("Harmonogram papír 2025", "Harmonogram papír 2026")
-check("stary a novy rocnik bez letopoctu", [_nazev(x, rocniky) for x in rocniky],
-      ["Upozornění: Papír", "Upozornění: Papír"])
 check("stary a novy rocnik jeden otisk",
       _api.fingerprint(rocniky[0]) == _api.fingerprint(rocniky[1]), True)
 
-casti = _sada("Harmonogram plast - Horní Ves", "Harmonogram plast - Dolní Ves")
-check("obec bez velkych pismen se nezdvojuje", [_nazev(x, casti) for x in casti],
-      ["Upozornění: Plast - Horní Ves", "Upozornění: Plast - Dolní Ves"])
+print("prihlaseni jen existujicich harmonogramu")
+import asyncio  # noqa: E402
 
-samotny = _sada("Harmonogram papír NOVÁ LHOTA + ZÁHOŘÍ 2026")
-check("jediny harmonogram zustane kratky", _nazev(samotny[0], samotny),
-      "Upozornění: Papír")
 
-dva_roky = _sada("Harmonogram bioodpad NOVÁ LHOTA 2026",
-                 "Harmonogram bioodpad ZÁHOŘÍ 2026",
-                 "Harmonogram bioodpad NOVÁ LHOTA 2027",
-                 "Harmonogram bioodpad ZÁHOŘÍ 2027")
-check("mistni casti pres dva rocniky", [_nazev(x, dva_roky) for x in dva_roky],
-      ["Upozornění: Bioodpad Nová", "Upozornění: Bioodpad Záhoří"] * 2)
+class _Klient(MojeOdpadkyClient):
+    def __init__(self):
+        super().__init__("u", "p", "novalhota", session=object())
+        self.prihlaseno = []
 
-nesledovany = [
-    Schedule(schedule_id=200, name="Harmonogram bioodpad NOVÁ LHOTA 2026",
-             subscribed=True),
-    Schedule(schedule_id=201, name="Harmonogram bioodpad ZÁHOŘÍ 2026",
-             subscribed=False),
-]
-check("rozlisi i proti nesledovanemu",
-      _nazev(nesledovany[0], nesledovany), "Upozornění: Bioodpad Nová")
+    async def async_subscribe(self, schedule_id, notification=False, email=""):
+        self.prihlaseno.append(schedule_id)
+
+    async def async_fetch_page(self):
+        return BODY
+
+
+_klient = _Klient()
+# 8001 je sledovaný, 8007 na webu je, ale nesledovaný, 1234 už na webu není.
+asyncio.run(_klient.async_apply_selection({8001, 8007, 1234}, False, BODY))
+check("prihlasi se jen harmonogram, ktery na webu je", _klient.prihlaseno, [8007])
 
 print("prelom roku")
 fingerprint = _api.fingerprint

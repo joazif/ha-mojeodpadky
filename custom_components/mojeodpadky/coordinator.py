@@ -339,7 +339,9 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         if self._fingerprints != pred and self._applied is not None:
             await self._async_save_state()
 
-        if not chybejici:
+        # Stránka bez jediného harmonogramu je spíš chyba čtení než přelom
+        # roku - z výběru se kvůli ní nic vyřazovat nebude.
+        if not chybejici or not znama:
             return False
 
         novy_vyber = set(self.selected)
@@ -351,29 +353,31 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             nastupce = (
                 find_successor(otisk, schedules, novy_vyber) if otisk else None
             )
+            novy_vyber.discard(stare)
             if nastupce is None:
                 ztraceno.append(stare)
                 continue
-            novy_vyber.discard(stare)
             novy_vyber.add(nastupce)
             prevedeno[stare] = nastupce
 
+        if prevedeno:
+            _LOGGER.info("Přelom roku: harmonogramy převedené na nové %s", prevedeno)
         if ztraceno:
-            _LOGGER.warning(
+            # Harmonogram, který na webu není, už nejde sledovat ani odhlásit.
+            # Ve výběru by jen zůstal viset; obec ho často nahradí jinak
+            # pojmenovaným (papír a plast -> tříděný odpad) a ten web sám
+            # přihlásí, nebo ho jde zaškrtnout v nastavení.
+            _LOGGER.info(
                 "Harmonogramy %s už na webu nejsou a nástupce se nenašel; "
-                "zkontrolujte výběr v nastavení integrace",
+                "z výběru se vyřazují",
                 ztraceno,
             )
 
-        if not prevedeno:
-            return False
-
-        _LOGGER.info("Přelom roku: harmonogramy převedené na nové %s", prevedeno)
         self.selected = novy_vyber
-        # Otisky nepřevedených harmonogramů musí zůstat, jinak by se při
-        # dalším přelomu roku neměly podle čeho hledat.
         for stare, nove in prevedeno.items():
             self._fingerprints[nove] = self._fingerprints.pop(stare)
+        for stare in ztraceno:
+            self._fingerprints.pop(stare, None)
         # Ať to není vidět jako uživatelova změna - jinak by se odhlašovalo.
         await self._async_remember_selection()
 
@@ -386,7 +390,8 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
                 },
             )
 
-        return True
+        # Nová stránka je potřeba jen tehdy, když se bude přihlašovat nástupce.
+        return bool(prevedeno)
 
     async def _async_selection_changed(self) -> bool:
         """Změnil uživatel výběr harmonogramů v Home Assistantu?

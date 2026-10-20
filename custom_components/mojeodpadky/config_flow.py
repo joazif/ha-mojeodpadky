@@ -319,10 +319,11 @@ class MojeOdpadkyOptionsFlow(OptionsFlow):
             return self.async_abort(reason="not_loaded")
         schedules = coordinator.data.schedules
 
-        current = self.config_entry.options.get(
-            CONF_SCHEDULES,
-            [str(item.schedule_id) for item in schedules if item.subscribed],
-        )
+        # Zaškrtnuté je to, co je na webu opravdu přihlášené - ne výběr
+        # uložený při instalaci. Web sám přihlašuje třeba nový ročník
+        # harmonogramu; kdyby tu nebyl zaškrtnutý, uložení formuláře by ho
+        # bralo jako odškrtnutí a na webu odhlásilo.
+        current = [str(item.schedule_id) for item in schedules if item.subscribed]
 
         schema = vol.Schema(
             {
