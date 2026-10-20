@@ -211,40 +211,50 @@ uvidíš to po kliknutí na počet.
 > `<obec>` v příkladech nahraď svou obcí — přesné názvy entit najdeš
 > ve Vývojářských nástrojích → Stavy (filtr `odevzdani`, resp. `poplatek`).
 
-Komodity, souhrny a poplatek v jedné kartě:
+Komodity, souhrny a poplatek v jedné kartě. Komodity se do ní doplňují samy
+a řadí se podle nejbližšího svozu, takže kartu není potřeba upravovat, když
+obec komoditu přidá, přejmenuje nebo přestane svážet (třeba papír a plast
+zvlášť nahradí společný svoz „Papír, Plast“). Potřebuje z HACS kartu
+[auto-entities](https://github.com/thomasloven/lovelace-auto-entities).
 
 ```yaml
-type: entities
-title: Svoz odpadu
-entities:
-  - entity: sensor.<obec>_bio
-    name: Bio
-  - entity: sensor.<obec>_papir
-    name: Papír
-  - entity: sensor.<obec>_plast
-    name: Plast
-  - entity: sensor.<obec>_smesny_odpad
-    name: Směsný odpad
-  - type: divider
-  - entity: sensor.<obec>_posledni_odevzdani
-    name: Poslední odevzdání
-  - entity: sensor.<obec>_pristi_svoz
-    name: Příští svoz
-  - type: divider
-  - entity: sensor.<obec>_predpokladany_poplatek
-    name: Po úlevě
-    icon: mdi:cash
-  - entity: sensor.<obec>_sazba_poplatku
-    name: Sazba
-  - entity: sensor.<obec>_uleva_mesoh
-    name: Úleva MESOH
-  - entity: sensor.<obec>_uleva_v_procentech
-    name: Úleva
+type: custom:auto-entities
+show_empty: true
+card:
+  type: entities
+  title: Svoz odpadu
+filter:
+  template: |-
+    {#- Komodity, které mají ještě svoz, podle nejbližšího svozu; pod nimi pevné řádky. -#}
+    {%- set dev = device_id('sensor.<obec>_pristi_svoz') -%}
+    {%- set zarizeni = (device_attr(dev, 'name_by_user') or device_attr(dev, 'name')) ~ ' ' -%}
+    {%- set ns = namespace(svozy=[], radky=[]) -%}
+    {%- for e in device_entities(dev) | select('match', 'sensor\.') -%}
+      {%- if state_attr(e, 'harmonogram') is not none and state_attr(e, 'days_to') is not none -%}
+        {%- set ns.svozy = ns.svozy + [{'e': e, 'n': state_attr(e, 'friendly_name') | replace(zarizeni, ''), 'd': state_attr(e, 'days_to') | int(999)}] -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- for s in ns.svozy | sort(attribute='n') | sort(attribute='d') -%}
+      {%- set ns.radky = ns.radky + [{'entity': s.e, 'name': s.n}] -%}
+    {%- endfor -%}
+    {%- set ns.radky = ns.radky + [
+      {'type': 'divider'},
+      {'entity': 'sensor.<obec>_posledni_odevzdani', 'name': 'Poslední odevzdání'},
+      {'entity': 'sensor.<obec>_pristi_svoz', 'name': 'Příští svoz'},
+      {'type': 'divider'},
+      {'entity': 'sensor.<obec>_predpokladany_poplatek', 'name': 'Po úlevě', 'icon': 'mdi:cash'},
+      {'entity': 'sensor.<obec>_sazba_poplatku', 'name': 'Sazba'},
+      {'entity': 'sensor.<obec>_uleva_mesoh', 'name': 'Úleva MESOH'},
+      {'entity': 'sensor.<obec>_uleva_v_procentech', 'name': 'Úleva'}
+    ] -%}
+    {{ ns.radky }}
 ```
 
-Komodity se jmenují podle toho, co posílá web, takže `bio`, `papir`, `plast`
-a `smesny_odpad` u jiné obce můžou vypadat jinak. Tlačítko ruční aktualizace
-se přidá jako `- entity: button.<obec>_aktualizovat`.
+Komodity karta pozná podle atributů `harmonogram` a `days_to`, které mají jen
+senzory svozů komodit, a bere je ze zařízení služby (proto stačí
+`sensor.<obec>_pristi_svoz` na jednom místě). Pevné řádky pod nimi jsou
+obyčejný seznam: tlačítko ruční aktualizace se přidá jako
+`{'entity': 'button.<obec>_aktualizovat'}`.
 
 ## Karta: co jsem odevzdal
 

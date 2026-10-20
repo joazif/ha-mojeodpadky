@@ -1,5 +1,13 @@
 # Změny
 
+## Nevydáno
+
+### Změněno
+
+- README: karta „Přehled svozů“ je automatická (auto-entities). Komodity se
+  doplňují samy a řadí podle nejbližšího svozu, takže kartu není potřeba
+  upravovat, když obec komoditu přidá, přejmenuje nebo přestane svážet.
+
 ## 0.1.3 – 2026-10-20
 
 ### Opraveno
