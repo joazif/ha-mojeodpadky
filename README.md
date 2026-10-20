@@ -12,8 +12,8 @@
 <p align="center">
   <img alt="Verze" src="https://img.shields.io/github/v/release/joazif/ha-mojeodpadky?style=flat-square&color=4c8b2b&label=verze">
   <img alt="Stažení" src="https://img.shields.io/github/downloads/joazif/ha-mojeodpadky/total?style=flat-square&color=4c8b2b&label=sta%C5%BEen%C3%AD">
-  <img alt="HACS" src="https://img.shields.io/badge/HACS-vlastn%C3%AD%20repozit%C3%A1%C5%99-4c8b2b?style=flat-square">
-  <img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.6%2B-4c8b2b?style=flat-square">
+  <img alt="HACS" src="https://img.shields.io/badge/HACS-integrace-4c8b2b?style=flat-square">
+  <img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.11%2B-4c8b2b?style=flat-square">
 </p>
 
 > [!WARNING]
@@ -37,8 +37,8 @@
   počet osob na stanovišti, konec MESOH roku a odpočet dní do něj.
 - **Poplatek:** předpokládaný poplatek na příští rok, sazba, úleva v korunách
   i procentech — každé zvlášť, aby šel dělat graf.
-- **E-mailová upozornění** z webu se zapínají a vypínají pro každý harmonogram
-  zvlášť, stejně jako na webu.
+- **E-mailová upozornění** z webu se zapínají a vypínají pro každou sledovanou
+  komoditu zvlášť.
 - **Víc účtů a víc obcí** — každé přihlášení je samostatná služba.
 - Tlačítko **Aktualizovat**, interval stahování 1 / 3 / 6 / 24 hodin.
 
@@ -46,17 +46,18 @@
 
 ### HACS (doporučeno)
 
-[![Otevřít repozitář v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
+1. Otevři HACS, vyhledej **Moje odpadky** a klikni **Download**
+2. Restartuj Home Assistant
+3. **Nastavení → Zařízení a služby → Přidat integraci → Moje odpadky**
 
-Nebo ručně:
+[![Otevřít v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
+[![Přidat integraci](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=mojeodpadky)
+
+Když ji HACS ve vyhledávání nenajde, přidej ji jako vlastní repozitář:
 
 1. HACS → ⋮ → **Custom repositories**
 2. Repozitář `https://github.com/joazif/ha-mojeodpadky`, kategorie **Integration**
-3. Najdi *Moje odpadky*, klikni **Download**
-4. Restartuj Home Assistant
-5. **Nastavení → Zařízení a služby → Přidat integraci → Moje odpadky**
-
-[![Přidat integraci](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=mojeodpadky)
+3. Pak pokračuj krokem 1 výše
 
 ### Ručně
 
@@ -97,7 +98,7 @@ Rozdělené tak, jak je ukazuje stránka zařízení.
 
 | Entita | Stav | Zajímavé atributy |
 |---|---|---|
-| Kalendář (jmenuje se podle obce) | `Zapnuto` v den svozu | všechny svozy roku |
+| Kalendář (jmenuje se podle obce) | `Zapnuto` v den svozu | nejbližší svoz; všechny svozy roku jsou jeho události |
 | `sensor.<obec>_<komodita>` | `Za 15 dní` | `datum`, `days_to`, `harmonogram` |
 | `sensor.<obec>_pristi_svoz` | `Zítra` | `datum`, `days_to`, `types` |
 | `sensor.<obec>_posledni_odevzdani` | `Včera` | `datum`, `komodita`, `nadoba`, `zaznamy` |
@@ -372,16 +373,19 @@ ne každý den znovu.
 
 ## Poznámky
 
-- **Odhlašuje se jen při změně výběru v Home Assistantu.** Integrace si
-  pamatuje, co naposledy na web promítla. Změnu udělanou na webu respektuje
-  a nepřepisuje ji, prázdný výběr ignoruje — aby rozejitý stav nebo chyba
-  v nastavení neodhlásila odběr, o který nikdo nepřišel dobrovolně.
+- **Výběr v Home Assistantu platí.** Harmonogram zaškrtnutý v Home Assistantu
+  integrace na webu přihlásí; když ho na webu zrušíš, při další obnově ho
+  přihlásí znovu. Odhlašuje ale jen při změně výběru v Home Assistantu: odběr
+  přidaný na webu nechá být a prázdný výběr ignoruje — aby rozejitý stav nebo
+  chyba v nastavení neodhlásila odběr, o který nikdo nepřišel dobrovolně.
 - **Přelom roku:** obec vypíše nové harmonogramy s novými ID a staré zmizí.
   Integrace si u vybraných harmonogramů pamatuje komoditu a místní část,
   takže výběr sama převede na letošní obdobu. Když nástupce nenajde, napíše
   to do logu. Přepínače upozornění zůstanou tytéž.
 - Po zapnutí e-mailových upozornění se výsledek ověřuje; když server zapne
   upozornění jinde, přepínač to ohlásí jako chybu.
+- **Změněné heslo:** když server uložené heslo odmítne, Home Assistant nabídne
+  v **Nastavení → Zařízení a služby** zadat nové. Službu není třeba mazat.
 - Senzory, jejichž stav závisí na dnešku, se přepočítají po půlnoci samy.
 - Když nástěnka nebo hodnocení selže, senzory svozů jedou dál.
 
@@ -414,6 +418,14 @@ Testuje parsery proti markupu ze skutečné stránky (osobní údaje jsou ve
 fixture nahrazené neutrálními hodnotami a obec smyšlenou). Před zveřejněním
 změn se hodí pustit i `./tools/kontrola-udaju.sh`.
 
+Testy nad Home Assistantem (načtení integrace, průvodce, opětovné přihlášení,
+nastavení) potřebují balíček `pytest-homeassistant-custom-component`; bez něj
+se přeskočí:
+
+```bash
+pytest tests/ -o asyncio_mode=auto
+```
+
 ## Přístup k datům
 
 Data poskytuje [mojeodpadky.cz](https://www.mojeodpadky.cz). Integrace je
@@ -423,7 +435,9 @@ Integrace se přihlašuje uživatelskými údaji a čte běžné stránky webu.
 Nepoužívá žádné neveřejné rozhraní.
 
 Data se obnovují podle nastaveného intervalu, standardně každých šest hodin.
-Jedno obnovení stáhne svozový kalendář a první stránku nástěnky. Hodnocení
+Jedno obnovení stáhne svozový kalendář a první stránku nástěnky; další stránky
+nástěnky jen tehdy, když se záznamy probíhajícího MESOH roku na první
+nevejdou, a veřejnou stránku obce jednou kvůli jejímu názvu. Hodnocení
 stanoviště a inventura se berou jen tehdy, když na nástěnce přibude nový
 záznam, nebo nejvýš jednou za den — hodnocení má skoro megabajt a mění se
 právě jen po svozu.

@@ -1,5 +1,60 @@
 # Změny
 
+## 0.1.2 – 2026-10-20
+
+### Přidáno
+
+- Opětovné přihlášení po změně hesla. Když server uložené heslo odmítne (při
+  startu i později za běhu), Home Assistant zastaví stahování a v **Nastavení →
+  Zařízení a služby** nabídne zadat nové heslo. Ověří ho a integraci znovu
+  načte; dřív šlo heslo opravit jen smazáním a novým přidáním služby.
+
+### Změněno
+
+- Vyžaduje Home Assistant 2024.11 nebo novější (koordinátor dostává config
+  entry výslovně, což starší verze neumí).
+- Spojení se serverem vytváří Home Assistant (`async_create_clientsession`),
+  pro každý účet vlastní, s vlastními cookies. Home Assistant ho sám uklidí při
+  uvolnění služby; průvodce si bere vlastní a po ověření ho odpojí. Požadavky
+  dál nesou User-Agent integrace s odkazem na repozitář.
+- Integrace už sama nenastavuje `entity_id`. Nové entity dostanou stejná ID jako
+  dosud (`sensor.<obec>_odevzdano_<komodita>`, `…_odevzdano_celkem`,
+  `…_obdobi_odevzdani`) přes navržené ID, které pak vlastní registr Home
+  Assistantu. Stávající entity se nemění a přejmenování uživatelem platí.
+- Přepínače upozornění už nemají v atributech e-mail z webu: atributy vidí
+  každý uživatel Home Assistantu a ukládají se do historie i záloh.
+- Velká stránka hodnocení stanoviště se zpracovává mimo smyčku událostí Home
+  Assistantu.
+- Názvy „Σ Celkem“ a „Období“ jsou v překladech (anglicky „Σ Total“, „Period“),
+  ne napevno v kódu.
+- Nastavení (options flow) a opětovné přihlášení používají aktuální API Home
+  Assistantu (`self.config_entry`, `_get_reauth_entry`).
+- README: opravené popisy, které neodpovídaly kódu (zrušený odběr na webu se
+  podle výběru v Home Assistantu přihlásí znovu, upozornění jsou po komoditách,
+  kalendář má svozy jako události, co všechno se při obnovení stahuje).
+- Testy nad Home Assistantem pro průvodce, opětovné přihlášení, nastavení
+  a celé načtení integrace včetně ID entit a User-Agentu (`tests/test_reauth.py`,
+  `test_config_flow.py`, `test_setup.py`).
+- README: instalace začíná vyhledáním v HACS, vlastní repozitář je jen záloha.
+
+### Opraveno
+
+- Odmítnuté heslo se dřív hlásilo jako výpadek serveru, takže to Home Assistant
+  donekonečna zkoušel znovu se starým heslem.
+- Vypršení časového limitu spojení se nehlásilo jako chyba spojení: v průvodci
+  skončilo neznámou chybou a při stahování výpisem chyby do logu.
+- Každá chyba webu během obnovy dat se teď hlásí jako dočasná nedostupnost.
+  Dřív některé (třeba poškozená data kalendáře) končily neočekávanou chybou.
+- Průvodce přidáním zavírá spojení se serverem i tehdy, když je účet už
+  nastavený nebo průvodce zavřeš uprostřed. Neočekávanou chybu ohlásí místo
+  pádu.
+- Nastavení služby, která není načtená, se neotevře s prázdným seznamem
+  harmonogramů (uložením by se výběr smazal), ale řekne proč.
+- Integrace se znovu načítá jen při skutečné změně výběru nebo intervalu. Dřív
+  se načetla i při převodu harmonogramů na nový rok (uprostřed stahování)
+  a po zadání nového hesla dvakrát.
+- Kalendář nevracel svoz začínající přesně na konci dotazovaného rozsahu.
+
 ## 0.1.1 – 2026-10-15
 
 ### Změněno

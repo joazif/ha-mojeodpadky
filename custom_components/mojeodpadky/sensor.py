@@ -14,7 +14,6 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import slugify
 
 from . import MojeOdpadkyConfigEntry
 from .const import (
@@ -307,7 +306,16 @@ class CommodityCountSensor(MojeOdpadkyEntity, SensorEntity):
         # ukazuje aktuální název, takže s rokem by se loňský průběh jmenoval
         # letošním rokem; a ID se po vzniku nemění, rok by zastaral 1. října.
         self._attr_name = komodita
-        self.entity_id = f"sensor.{_device_slug(coordinator)}_odevzdano_{_slug(komodita)}"
+
+    @property
+    def suggested_object_id(self) -> str:
+        """ID nové entity: sensor.<obec>_odevzdano_<komodita>.
+
+        Název je jen "Bio", ID by pak kolidovalo se senzorem svozu Bio.
+        Jde jen o návrh pro nově vznikající entitu - zařízení HA předřadí
+        sám a ID pak vlastní registr, přejmenování uživatelem platí.
+        """
+        return f"odevzdano {self.komodita}"
 
     @property
     def native_value(self) -> int | None:
@@ -362,14 +370,18 @@ class CountTotalSensor(MojeOdpadkyEntity, SensorEntity):
     _attr_native_unit_of_measurement = "×"
     _attr_icon = "mdi:sigma"
 
-    # Σ se v abecedním řazení dostane za všechna česká písmena, takže je
-    # součet v diagnostice vždycky pod jednotlivými komoditami.
-    _attr_name = "Σ Celkem"
+    # Σ se v abecedním řazení dostane za všechna písmena, takže je součet
+    # v diagnostice vždycky pod jednotlivými komoditami ("Σ Celkem").
+    _attr_translation_key = "count_total"
 
     def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"{entry_id}_count_total"
-        self.entity_id = f"sensor.{_device_slug(coordinator)}_odevzdano_celkem"
+
+    @property
+    def suggested_object_id(self) -> str:
+        """ID nové entity: sensor.<obec>_odevzdano_celkem."""
+        return "odevzdano celkem"
 
     @property
     def native_value(self) -> int | None:
@@ -401,18 +413,27 @@ class CountPeriodSensor(MojeOdpadkyEntity, SensorEntity):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar-range"
+    _attr_translation_key = "count_period"
 
     def __init__(self, coordinator: MojeOdpadkyCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"{entry_id}_count_period"
-        self.entity_id = f"sensor.{_device_slug(coordinator)}_obdobi_odevzdani"
 
     @property
-    def name(self) -> str:
+    def suggested_object_id(self) -> str:
+        """ID nové entity bez roku: sensor.<obec>_obdobi_odevzdani.
+
+        Název se každý rok mění (2026/27), ID má zůstat stejné.
+        """
+        return "obdobi odevzdani"
+
+    @property
+    def name(self) -> str | None:
         """MESOH rok, jak ho píše web: 2026/27."""
         obdobi = _obdobi(self.coordinator)
         if not obdobi:
-            return "Období"
+            # Dokud období není známé, přeložený název ("Období").
+            return super().name
         return f"{obdobi[0].year}/{obdobi[1].year % 100:02d}"
 
     @property
@@ -777,17 +798,6 @@ def _obdobi(coordinator: MojeOdpadkyCoordinator):
     if rating and rating.period_from and rating.period_to:
         return rating.period_from, rating.period_to
     return None
-
-
-def _device_slug(coordinator: MojeOdpadkyCoordinator) -> str:
-    """Začátek entity_id podle zařízení: "Nová Lhota" -> nova_lhota.
-
-    Stejný slugify jako v migraci v __init__.py, aby nové entity i ty
-    přejmenované skončily na úplně stejném ID.
-    """
-    if coordinator.entry is not None:
-        return slugify(coordinator.entry.title)
-    return slugify(coordinator.client.town or coordinator.client.slug or "odpadky")
 
 
 def _slug(value: str) -> str:

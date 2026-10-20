@@ -133,13 +133,16 @@ class NotificationSwitch(MojeOdpadkyEntity, SwitchEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Celé názvy harmonogramů, adresa a ID odběrů."""
+        """Celé názvy harmonogramů a ID odběrů.
+
+        E-mail sem schválně nepatří: atributy vidí každý uživatel Home
+        Assistantu a ukládají se do historie i záloh.
+        """
         sledovane = self._schedules
         if not sledovane:
             return {}
         return {
             "harmonogram": ", ".join(item.name for item in sledovane),
-            "email": self.coordinator.email,
             "id_odberu": ", ".join(
                 str(item.subscribe_id) for item in sledovane if item.subscribe_id
             ),

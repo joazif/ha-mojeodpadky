@@ -51,13 +51,14 @@ class MojeOdpadkyCalendar(MojeOdpadkyEntity, CalendarEntity):
         if not self.coordinator.data:
             return []
 
-        start = dt_util.as_local(start_date).date()
-        end = dt_util.as_local(end_date).date()
-
+        # Celodenní svoz trvá od půlnoci do půlnoci. Patří do výsledku, když
+        # se s rozsahem [start, end) aspoň trochu překrývá - svoz začínající
+        # přesně v okamžiku konce rozsahu už ne.
         return [
             _to_calendar_event(event)
             for event in self.coordinator.data.events
-            if start <= event.day <= end
+            if dt_util.start_of_local_day(event.day) < end_date
+            and dt_util.start_of_local_day(event.day + timedelta(days=1)) > start_date
         ]
 
 

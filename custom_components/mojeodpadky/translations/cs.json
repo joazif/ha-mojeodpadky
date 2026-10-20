@@ -16,15 +16,24 @@
           "schedules": "Harmonogramy",
           "scan_interval_hours": "Jak často stahovat data"
         }
+      },
+      "reauth_confirm": {
+        "title": "Nové heslo k mojeodpadky.cz",
+        "description": "Server odmítl uložené heslo k účtu {username}. Nejspíš se na webu změnilo – zadejte to nové.",
+        "data": {
+          "password": "Heslo"
+        }
       }
     },
     "error": {
       "cannot_connect": "Nepodařilo se spojit se serverem.",
       "invalid_auth": "Neplatné přihlašovací jméno nebo heslo.",
-      "slug_not_found": "Přihlášení prošlo, ale nepodařilo se zjistit, ke které obci účet patří. Nahlaste to prosím na GitHubu."
+      "slug_not_found": "Přihlášení prošlo, ale nepodařilo se zjistit, ke které obci účet patří. Nahlaste to prosím na GitHubu.",
+      "unknown": "Neočekávaná chyba, podrobnosti jsou v logu Home Assistantu."
     },
     "abort": {
-      "already_configured": "Tento účet už je nastavený."
+      "already_configured": "Tento účet už je nastavený.",
+      "reauth_successful": "Heslo je uložené, integrace se znovu načetla."
     }
   },
   "options": {
@@ -37,6 +46,9 @@
           "scan_interval_hours": "Jak často stahovat data"
         }
       }
+    },
+    "abort": {
+      "not_loaded": "Služba teď není načtená (web je nedostupný nebo je potřeba zadat nové heslo). Nastavení půjde změnit, až se načte."
     }
   },
   "entity": {
@@ -79,6 +91,12 @@
       },
       "period_days_left": {
         "name": "Do konce MESOH roku"
+      },
+      "count_total": {
+        "name": "Σ Celkem"
+      },
+      "count_period": {
+        "name": "Období"
       }
     },
     "button": {

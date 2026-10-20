@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -15,6 +16,7 @@ from .api import (
     CollectedItem,
     CollectionEvent,
     Fee,
+    InvalidAuth,
     MojeOdpadkyClient,
     Period,
     MojeOdpadkyError,
@@ -89,6 +91,9 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         super().__init__(
             hass,
             _LOGGER,
+            # Výslovně, ne přes kontext: podle něj HA při odmítnutém heslu
+            # za běhu ví, u které služby spustit opětovné přihlášení.
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(hours=scan_interval_hours),
         )
@@ -120,13 +125,21 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         self._period_cache: tuple[int, list[CollectedItem]] | None = None
 
     async def _async_update_data(self) -> MojeOdpadkyData:
-        # Kalendář se stahuje jednou a stránka se pak podává dál; dřív si ji
-        # tahal zvlášť koordinátor i srovnání odběrů.
+        """Jedno obnovení; chyby webu převést na to, čemu rozumí HA."""
         try:
-            body = await self.client.async_fetch_page()
+            return await self._async_fetch_data()
+        except InvalidAuth as err:
+            # Změněné heslo: HA zastaví stahování a nabídne zadat nové
+            # (async_step_reauth v config_flow.py). S UpdateFailed by to
+            # jen donekonečna zkoušel znovu se starým heslem.
+            raise ConfigEntryAuthFailed(str(err)) from err
         except MojeOdpadkyError as err:
             raise UpdateFailed(str(err)) from err
 
+    async def _async_fetch_data(self) -> MojeOdpadkyData:
+        # Kalendář se stahuje jednou a stránka se pak podává dál; dřív si ji
+        # tahal zvlášť koordinátor i srovnání odběrů.
+        body = await self.client.async_fetch_page()
         schedules = self.client.parse_schedules(body)
 
         # Přelom roku se řeší dřív než odběry, ať se letošní harmonogram
@@ -136,13 +149,9 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             schedules = self.client.parse_schedules(body)
 
         odhlasit = await self._async_selection_changed()
-
-        try:
-            nove_telo = await self.client.async_apply_selection(
-                self.selected, odhlasit, body
-            )
-        except MojeOdpadkyError as err:
-            raise UpdateFailed(str(err)) from err
+        nove_telo = await self.client.async_apply_selection(
+            self.selected, odhlasit, body
+        )
 
         if nove_telo is not body:
             # Něco se přihlásilo nebo odhlásilo, stránka je čerstvá.
@@ -443,14 +452,15 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
 
         # Když se stránka stahuje, vezmou se z ní i záznamy za celý rok -
         # je to jediný zdroj bodů u komodit, které se odevzdávají zřídka.
-        zaznamy = self.client.parse_rating_records(body)
+        # Stránka má kolem 0,8 MB, regexy nad ní běží mimo smyčku událostí.
+        zaznamy, rating = await self.hass.async_add_executor_job(
+            _parse_rating_page, body
+        )
         if zaznamy is not None:
             self._year_records = zaznamy
         # "Pro toto období zatím hodnocení neexistuje" - drží se poslední
         # vyhodnocený rok, stejně jako u poplatku a skóre.
-        return self.client.parse_rating(body) or (
-            self.data.rating if self.data else None
-        )
+        return rating or (self.data.rating if self.data else None)
 
     def _latest_points(
         self, collected: list[CollectedItem]
@@ -589,6 +599,16 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
             if event.day >= today
             and (waste_type is None or event.waste_type == waste_type)
         ]
+
+
+def _parse_rating_page(
+    body: str,
+) -> tuple[list[CollectedItem] | None, Rating | None]:
+    """Záznamy za rok a souhrn z velké stránky hodnocení (běží v executoru)."""
+    return (
+        MojeOdpadkyClient.parse_rating_records(body),
+        MojeOdpadkyClient.parse_rating(body),
+    )
 
 
 def dt_today() -> date:

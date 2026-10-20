@@ -30,6 +30,20 @@ BASE = "https://www.mojeodpadky.cz"
 USER_AGENT = "Mozilla/5.0 (compatible; HomeAssistant mojeodpadky; +https://github.com/joazif/ha-mojeodpadky)"
 TIMEOUT = aiohttp.ClientTimeout(total=45)
 
+
+def _headers(referer: str | None = None) -> dict[str, str]:
+    """Hlavičky každého požadavku.
+
+    Posílají se u požadavku, ne jako výchozí hlavičky session: session od
+    Home Assistantu má jako výchozí jeho User-Agent a ten se má přebíjet
+    právě takhle. Odkaz na repozitář dává provozovateli webu vědět, odkud
+    požadavky jsou.
+    """
+    hlavicky = {"User-Agent": USER_AGENT, "Accept-Language": "cs-CZ,cs;q=0.9"}
+    if referer:
+        hlavicky["Referer"] = referer
+    return hlavicky
+
 RE_EVENTS = re.compile(
     r'id="collectionScheduleCalendar"[^>]*?\sdata-events="([^"]*)"'
 )
@@ -487,12 +501,11 @@ class MojeOdpadkyClient:
         self._login = login
         self._password = password
         self._slug = slug or None
+        # Home Assistant předává vlastní session z async_create_clientsession
+        # (vlastní cookies pro každý účet, uklidí ji sám). Bez ní - nástroje
+        # a testy mimo HA - si klient založí svoji a zavírá ji sám.
         self._owns_session = session is None
-        self._session = session or aiohttp.ClientSession(
-            timeout=TIMEOUT,
-            headers={"User-Agent": USER_AGENT, "Accept-Language": "cs-CZ,cs;q=0.9"},
-            cookie_jar=aiohttp.CookieJar(),
-        )
+        self._session = session or aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar())
         self._lock = asyncio.Lock()
         self._logged_in = False
         self._town: str | None = None
@@ -508,7 +521,10 @@ class MojeOdpadkyClient:
         return self._town
 
     async def async_close(self) -> None:
-        """Zavřít vlastní session."""
+        """Zavřít session, kterou si klient založil sám.
+
+        Session od Home Assistantu nezavírá - tu uklízí ten, kdo ji vytvořil.
+        """
         if self._owns_session and not self._session.closed:
             await self._session.close()
 
@@ -552,12 +568,15 @@ class MojeOdpadkyClient:
         }
         try:
             async with self._session.post(
-                f"{BASE}/", data=payload, headers={"Referer": f"{BASE}/"}
+                f"{BASE}/",
+                data=payload,
+                headers=_headers(f"{BASE}/"),
+                timeout=TIMEOUT,
             ) as resp:
                 body = await resp.text()
                 final_path = resp.url.path
                 status = resp.status
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise MojeOdpadkyError(f"Spojení selhalo: {err}") from err
 
         has_form = RE_SIGNIN.search(body) is not None
@@ -718,10 +737,12 @@ class MojeOdpadkyClient:
 
     async def _get(self, url: str) -> str:
         try:
-            async with self._session.get(url) as resp:
+            async with self._session.get(
+                url, headers=_headers(), timeout=TIMEOUT
+            ) as resp:
                 resp.raise_for_status()
                 return await resp.text()
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise MojeOdpadkyError(f"GET {url} selhal: {err}") from err
 
     async def async_subscribe(
@@ -739,11 +760,12 @@ class MojeOdpadkyClient:
             async with self._session.post(
                 self._calendar_url,
                 data=payload,
-                headers={"Referer": self._calendar_url},
+                headers=_headers(self._calendar_url),
+                timeout=TIMEOUT,
             ) as resp:
                 resp.raise_for_status()
                 await resp.read()
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise MojeOdpadkyError(
                 f"Přihlášení harmonogramu {schedule_id} selhalo: {err}"
             ) from err
@@ -766,11 +788,12 @@ class MojeOdpadkyClient:
             async with self._session.post(
                 self._calendar_url,
                 data=payload,
-                headers={"Referer": self._calendar_url},
+                headers=_headers(self._calendar_url),
+                timeout=TIMEOUT,
             ) as resp:
                 resp.raise_for_status()
                 await resp.read()
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise MojeOdpadkyError(
                 f"Zapnutí upozornění u odběru {subscribe_id} selhalo: {err}"
             ) from err

@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
 
-from .api import InvalidAuth, MojeOdpadkyClient, MojeOdpadkyError
+from .api import MojeOdpadkyClient
 from .const import (
     CONF_SCAN_INTERVAL,
     DOMAIN,
@@ -41,10 +43,14 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
 ) -> bool:
     """Nastavit integraci z config entry."""
+    # Vlastní session pro každý účet: web hlídá přihlášení cookie a ve
+    # sdílené session HA by se cookies dvou účtů (nebo jiných integrací)
+    # pletly. Session vytvořenou tady HA sám odpojí, když se služba uvolní.
     client = MojeOdpadkyClient(
         login=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         slug=entry.data.get(CONF_SLUG),
+        session=async_create_clientsession(hass),
     )
 
     selected = {int(item) for item in entry.options.get(CONF_SCHEDULES, [])}
@@ -53,17 +59,10 @@ async def async_setup_entry(
         hass, client, selected, interval, entry.entry_id, entry
     )
 
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except ConfigEntryNotReady:
-        await client.async_close()
-        raise
-    except InvalidAuth as err:
-        await client.async_close()
-        raise ConfigEntryAuthFailed(str(err)) from err
-    except MojeOdpadkyError as err:
-        await client.async_close()
-        raise ConfigEntryNotReady(str(err)) from err
+    # Špatné heslo hlásí koordinátor jako ConfigEntryAuthFailed a HA pak
+    # spustí opětovné přihlášení (async_step_reauth); výpadek webu jako
+    # ConfigEntryNotReady a HA to zkusí později znovu.
+    await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -140,18 +139,14 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
 ) -> bool:
     """Odpojit integraci."""
-    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded:
-        await entry.runtime_data.client.async_close()
-    return unloaded
+    # Session odpojí HA sám (vznikla v async_setup_entry).
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(
     hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
 ) -> None:
     """Při smazání služby uklidit uložený stav (výběr a naposledy vídané záznamy)."""
-    from homeassistant.helpers.storage import Store
-
     for suffix in ("selection", "collected"):
         await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_{suffix}").async_remove()
 
@@ -159,5 +154,18 @@ async def async_remove_entry(
 async def async_reload_entry(
     hass: HomeAssistant, entry: MojeOdpadkyConfigEntry
 ) -> None:
-    """Po změně nastavení načíst znovu."""
+    """Po změně výběru nebo intervalu v nastavení načíst znovu.
+
+    Entry se mění i jinak: koordinátor při přelomu roku sám přepíše výběr
+    na nové harmonogramy (už ho má a reload uprostřed obnovy by zavřel
+    spojení) a opětovné přihlášení si reload obstará samo. Proto se načítá
+    jen tehdy, když se nastavení liší od toho, s čím koordinátor běží.
+    """
+    coordinator = entry.runtime_data
+    vyber = {int(item) for item in entry.options.get(CONF_SCHEDULES, [])}
+    interval = timedelta(
+        hours=int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_HOURS))
+    )
+    if vyber == coordinator.selected and interval == coordinator.update_interval:
+        return
     await hass.config_entries.async_reload(entry.entry_id)

@@ -16,15 +16,24 @@
           "schedules": "Schedules",
           "scan_interval_hours": "How often to refresh data"
         }
+      },
+      "reauth_confirm": {
+        "title": "New password for mojeodpadky.cz",
+        "description": "The server rejected the stored password for account {username}. It was probably changed on the website – enter the new one.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the server.",
       "invalid_auth": "Invalid username or password.",
-      "slug_not_found": "Signed in, but the account's municipality could not be determined. Please report it on GitHub."
+      "slug_not_found": "Signed in, but the account's municipality could not be determined. Please report it on GitHub.",
+      "unknown": "Unexpected error, see the Home Assistant log for details."
     },
     "abort": {
-      "already_configured": "This account is already configured."
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "The password has been saved and the integration reloaded."
     }
   },
   "options": {
@@ -37,6 +46,9 @@
           "scan_interval_hours": "How often to refresh data"
         }
       }
+    },
+    "abort": {
+      "not_loaded": "The service is not loaded right now (the website is unavailable or a new password is needed). Settings can be changed once it loads."
     }
   },
   "entity": {
@@ -79,6 +91,12 @@
       },
       "period_days_left": {
         "name": "Days until MESOH year end"
+      },
+      "count_total": {
+        "name": "Σ Total"
+      },
+      "count_period": {
+        "name": "Period"
       }
     },
     "button": {
