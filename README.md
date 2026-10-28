@@ -343,25 +343,58 @@ integrace viděla, si pamatuje i přes restart Home Assistantu, takže se nic
 neohlásí dvakrát a naopak se po restartu ohlásí i to, co přibylo, zatímco
 Home Assistant neběžel. Hned po instalaci (nemá s čím srovnávat) mlčí.
 
-Jedna zpráva za obnovení:
+Jedna zpráva za obnovení – nahoře komodita s počtem, pod ní každý pytel:
 
 ```yaml
 automation:
   - alias: Zapsáno na nástěnce
+    mode: queued
     triggers:
       - trigger: event
         event_type: mojeodpadky_nova_odevzdani
     actions:
       - action: notify.mobile_app
         data:
-          message: >-
-            {{ trigger.event.data.ucet }}:
-            {%- for z in trigger.event.data.zaznamy %}
-            • {{ z.komodita }} ({{ z.nadoba }}) {{ z.datum }}
-            {%- if z.pocet > 1 %} · {{ z.pocet }}×{% endif %}
-            {%- if z.ekobody_celkem is not none %} · {{ z.ekobody_celkem }} b{% endif %}
-            {%- endfor %}
+          message: |-
+            {%- set zaznamy = trigger.event.data.zaznamy -%}
+            {%- set ns = namespace(bloky=[]) -%}
+            {%- for kom in zaznamy | map(attribute='komodita') | unique -%}
+              {%- set radky = zaznamy | selectattr('komodita', 'eq', kom) | list -%}
+              {%- set nr = namespace(r=[]) -%}
+              {%- for z in radky -%}
+                {%- set eko = (z.ekobody | default('0') | string | replace(',', '.')) | float(0) -%}
+                {%- set body = (eko | round(1) | string).rstrip('0').rstrip('.') | replace('.', ',') -%}
+                {%- for i in range(z.pocet) -%}
+                  {%- set nr.r = nr.r + ['• ' ~ kom ~ ' – ' ~ as_datetime(z.datum).strftime('%-d. %-m. %Y') ~ ' · ' ~ z.nadoba ~ ' · ' ~ body ~ ' b'] -%}
+                {%- endfor -%}
+              {%- endfor -%}
+              {%- set ns.bloky = ns.bloky + [kom ~ ' ' ~ (radky | map(attribute='pocet') | sum) ~ '×\n\n' ~ (nr.r | join('\n'))] -%}
+            {%- endfor -%}
+            ♻️ {{ trigger.event.data.ucet }} – nové odevzdání odpadu
+
+            {{ ns.bloky | join('\n\n') }}
 ```
+
+Zpráva pak vypadá takhle:
+
+```text
+♻️ Nová Lhota – nové odevzdání odpadu
+
+Plast 4×
+
+• Plast – 28. 10. 2026 · 1BG000002 · 3,4 b
+• Plast – 28. 10. 2026 · 1BG000002 · 3,4 b
+• Plast – 28. 10. 2026 · 1BG000002 · 3,4 b
+• Plast – 28. 10. 2026 · 1BG000002 · 3,4 b
+
+Papír 2×
+
+• Papír – 28. 10. 2026 · 1BG000001 · 3 b
+• Papír – 28. 10. 2026 · 1BG000001 · 3 b
+```
+
+`mode: queued` zajistí, že při víc účtech, které se obnoví zároveň, přijde
+zpráva za každý z nich a žádná se nezahodí.
 
 Každý řádek v `zaznamy` má `datum` (ISO), `komodita`, `nadoba`, `pocet`,
 `ekobody` (body za jeden kus) a `ekobody_celkem`; událost navíc `pocet`

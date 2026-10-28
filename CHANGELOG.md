@@ -1,5 +1,12 @@
 # Změny
 
+## Nevydáno
+
+### Změněno
+
+- README: příklad automatizace na souhrnnou událost posílá zprávu ve tvaru
+  „komodita s počtem a pod ní každý pytel“.
+
 ## 0.1.5 – 2026-10-28
 
 ### Přidáno
