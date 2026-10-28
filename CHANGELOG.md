@@ -1,5 +1,15 @@
 # Změny
 
+## Nevydáno
+
+### Přidáno
+
+- Souhrnná událost `mojeodpadky_nova_odevzdani`: jedna za obnovení se všemi
+  novými odevzdáními účtu v `zaznamy`. Pytle, které web načítá každý zvlášť
+  (stejné řádky se stejnou nádobou a dnem), jsou sloučené do jednoho řádku
+  s počtem `pocet` a součtem bodů `ekobody_celkem` - na jednu zprávu místo
+  zprávy za každý pytel. Událost `mojeodpadky_odevzdano` za každý řádek zůstává.
+
 ## 0.1.4 – 2026-10-21
 
 ### Změněno

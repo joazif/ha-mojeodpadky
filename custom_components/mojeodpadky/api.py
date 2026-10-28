@@ -470,6 +470,35 @@ def diff_collected(
     return result
 
 
+def group_collected(items: list[CollectedItem]) -> list[dict]:
+    """Nová odevzdání sloučená po nádobě a dni, v pořadí nástěnky.
+
+    Pytle se na webu načítají každý zvlášť: čtyři pytle plastu jsou čtyři
+    stejné řádky. Do souhrnu jde jeden řádek s počtem a součtem bodů.
+    """
+    skupiny: dict[tuple, dict] = {}
+    for item in items:
+        radek = skupiny.get(item.key)
+        body = points_value(item)
+        if radek is None:
+            skupiny[item.key] = {
+                "datum": item.day.isoformat(),
+                "komodita": item.waste_type,
+                "nadoba": item.container,
+                "pocet": 1,
+                "ekobody": item.points,
+                "ekobody_celkem": body,
+            }
+            continue
+        radek["pocet"] += 1
+        if body is not None:
+            radek["ekobody_celkem"] = (radek["ekobody_celkem"] or 0) + body
+    for radek in skupiny.values():
+        if radek["ekobody_celkem"] is not None:
+            radek["ekobody_celkem"] = round(radek["ekobody_celkem"], 1)
+    return list(skupiny.values())
+
+
 def collected_to_json(items: list[CollectedItem]) -> list[list[str]]:
     """Záznamy v podobě pro uložení na disk: ``[datum, komodita, nádoba]``."""
     return [[item.day.isoformat(), item.waste_type, item.container] for item in items]

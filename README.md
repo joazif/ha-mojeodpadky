@@ -334,35 +334,51 @@ automation:
           message: Zítra se sváží směsný odpad.
 ```
 
-Upozornění na nový záznam v nástěnce. Událost se vyvolá pro každé odevzdání,
-které přibylo od minulého obnovení. Co už integrace viděla, si pamatuje i přes restart
-Home Assistantu, takže se nic neohlásí dvakrát a naopak se po restartu ohlásí i to, co přibylo,
-zatímco Home Assistant neběžel. Hned po instalaci (nemá s čím srovnávat) mlčí:
+Upozornění na nová odevzdání. Po každém obnovení, při kterém na nástěnce
+něco přibylo, vyvolá integrace jednu událost `mojeodpadky_nova_odevzdani` se
+seznamem všeho nového v `zaznamy`. Pytle se na webu načítají každý zvlášť
+(čtyři pytle plastu jsou čtyři stejné řádky), v seznamu jsou sloučené do
+jednoho řádku s počtem `pocet` a součtem bodů `ekobody_celkem`. Co už
+integrace viděla, si pamatuje i přes restart Home Assistantu, takže se nic
+neohlásí dvakrát a naopak se po restartu ohlásí i to, co přibylo, zatímco
+Home Assistant neběžel. Hned po instalaci (nemá s čím srovnávat) mlčí.
+
+Jedna zpráva za obnovení:
 
 ```yaml
 automation:
   - alias: Zapsáno na nástěnce
     triggers:
       - trigger: event
-        event_type: mojeodpadky_odevzdano
+        event_type: mojeodpadky_nova_odevzdani
     actions:
       - action: notify.mobile_app
         data:
           message: >-
-            {{ trigger.event.data.ucet }}: {{ trigger.event.data.komodita }}
-            ({{ trigger.event.data.nadoba }}), {{ trigger.event.data.datum }}.
+            {{ trigger.event.data.ucet }}:
+            {%- for z in trigger.event.data.zaznamy %}
+            • {{ z.komodita }} ({{ z.nadoba }}) {{ z.datum }}
+            {%- if z.pocet > 1 %} · {{ z.pocet }}×{% endif %}
+            {%- if z.ekobody_celkem is not none %} · {{ z.ekobody_celkem }} b{% endif %}
+            {%- endfor %}
 ```
 
-Při víc účtech nese událost pole `ucet` (název služby) a `entry_id`, takže jde
-automatizaci omezit jen na jeden účet:
+Každý řádek v `zaznamy` má `datum` (ISO), `komodita`, `nadoba`, `pocet`,
+`ekobody` (body za jeden kus) a `ekobody_celkem`; událost navíc `pocet`
+(všech nových řádků), `ucet` (název služby) a `entry_id`. Při víc účtech
+jde automatizaci omezit jen na jeden:
 
 ```yaml
     triggers:
       - trigger: event
-        event_type: mojeodpadky_odevzdano
+        event_type: mojeodpadky_nova_odevzdani
         event_data:
           ucet: Nová Lhota (jiny_login)
 ```
+
+Pro každý jednotlivý řádek nástěnky zvlášť je dál i událost
+`mojeodpadky_odevzdano` (`datum`, `komodita`, `nadoba`, `ekobody`, `ucet`,
+`entry_id`); u víc pytlů přijde víckrát.
 
 ### Připomenutí konce MESOH roku
 

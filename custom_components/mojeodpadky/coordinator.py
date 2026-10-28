@@ -30,6 +30,7 @@ from .api import (
     diff_collected,
     find_successor,
     fingerprint,
+    group_collected,
     latest_points,
     page_text,
     records_in_period,
@@ -44,6 +45,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_HOURS,
     DOMAIN,
     EVENT_COLLECTED,
+    EVENT_COLLECTED_SUMMARY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -504,7 +506,14 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         await self._seen_store.async_save({"collected": collected_to_json(collected)})
 
     def _fire_new_collected(self, nove: list[CollectedItem]) -> None:
-        """Vyvolat událost pro každý záznam, který na nástěnce přibyl."""
+        """Vyvolat událost pro každý nový záznam a jednu souhrnnou za obnovení."""
+        if not nove:
+            return
+        # Při víc účtech musí automatizace poznat, čí záznam to je.
+        ucet = {
+            "ucet": self.entry.title if self.entry else self.client.slug,
+            "entry_id": self.entry.entry_id if self.entry else None,
+        }
         for item in nove:
             _LOGGER.debug("Nový záznam na nástěnce: %s", item)
             self.hass.bus.async_fire(
@@ -514,11 +523,13 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
                     ATTR_WASTE_TYPE: item.waste_type,
                     ATTR_CONTAINER: item.container,
                     "ekobody": item.points,
-                    # Při víc účtech musí automatizace poznat, čí záznam to je.
-                    "ucet": self.entry.title if self.entry else self.client.slug,
-                    "entry_id": self.entry.entry_id if self.entry else None,
+                    **ucet,
                 },
             )
+        self.hass.bus.async_fire(
+            EVENT_COLLECTED_SUMMARY,
+            {"zaznamy": group_collected(nove), "pocet": len(nove), **ucet},
+        )
 
     @property
     def waste_types(self) -> list[str]:

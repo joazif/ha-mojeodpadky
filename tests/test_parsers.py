@@ -410,6 +410,21 @@ check("html entity v titulku",
       "Brandýs")
 check("stranka bez titulku", MojeOdpadkyClient.parse_town("<html></html>"), None)
 
+print("souhrn novych odevzdani")
+_C = _api.CollectedItem
+_dnes = [_C(date(2026, 10, 28), "Plast", "1BG102602", "3.4")] * 4 + [
+    _C(date(2026, 10, 28), "Papír", "1BG102601", "3")] * 2 + [
+    _C(date(2026, 10, 28), "Bio", "JUP100", "")]
+check("pytle se sloucí po nadobe a dni", _api.group_collected(_dnes), [
+    {"datum": "2026-10-28", "komodita": "Plast", "nadoba": "1BG102602",
+     "pocet": 4, "ekobody": "3.4", "ekobody_celkem": 13.6},
+    {"datum": "2026-10-28", "komodita": "Papír", "nadoba": "1BG102601",
+     "pocet": 2, "ekobody": "3", "ekobody_celkem": 6.0},
+    {"datum": "2026-10-28", "komodita": "Bio", "nadoba": "JUP100",
+     "pocet": 1, "ekobody": "", "ekobody_celkem": None},
+])
+check("prazdny souhrn", _api.group_collected([]), [])
+
 print("diff_collected")
 minule = collected[:]
 check("beze zmeny nic nehlasi", diff_collected(minule, collected), [])

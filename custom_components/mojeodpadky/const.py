@@ -32,3 +32,6 @@ ATTR_POINTS = "ekobody"
 # Událost pro automatizace - vyvolá se pro každé nové odevzdání,
 # které na nástěnce přibylo od minulého obnovení.
 EVENT_COLLECTED = "mojeodpadky_odevzdano"
+# Jedna událost na obnovení se všemi novými odevzdáními účtu - stejné pytle
+# sloučené do jednoho řádku s počtem. Na jednu souhrnnou zprávu.
+EVENT_COLLECTED_SUMMARY = "mojeodpadky_nova_odevzdani"

@@ -55,3 +55,30 @@ async def test_same_records_are_not_written_again(hass, hass_storage):
     before = dict(hass_storage[key])
     await coordinator._async_remember_seen([A, B])
     assert hass_storage[key] == before
+
+
+async def test_one_summary_event_per_refresh(hass):
+    """Za obnovení jedna souhrnná událost; pytle sloučené, záznamy zvlášť."""
+    from homeassistant.core import callback
+
+    from types import SimpleNamespace
+
+    coordinator = _coordinator(hass)
+    coordinator.client = SimpleNamespace(slug="novalhota")
+    zaznamy, souhrny = [], []
+    hass.bus.async_listen("mojeodpadky_odevzdano", callback(lambda e: zaznamy.append(e.data)))
+    hass.bus.async_listen("mojeodpadky_nova_odevzdani", callback(lambda e: souhrny.append(e.data)))
+    plast = CollectedItem(date(2026, 10, 28), "Plast", "1BG102602", "3.4")
+    papir = CollectedItem(date(2026, 10, 28), "Papír", "1BG102601", "3")
+    coordinator._fire_new_collected([plast] * 4 + [papir] * 2)
+    await hass.async_block_till_done()
+    assert len(zaznamy) == 6
+    assert len(souhrny) == 1
+    assert souhrny[0]["pocet"] == 6
+    assert [(r["komodita"], r["pocet"], r["ekobody_celkem"]) for r in souhrny[0]["zaznamy"]] == [
+        ("Plast", 4, 13.6),
+        ("Papír", 2, 6.0),
+    ]
+    coordinator._fire_new_collected([])
+    await hass.async_block_till_done()
+    assert len(souhrny) == 1
