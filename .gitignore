@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-ha/
 venv/
 .DS_Store
 .idea/

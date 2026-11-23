@@ -28,11 +28,11 @@ from .api import (
     collected_from_json,
     collected_to_json,
     diff_collected,
-    find_successor,
     fingerprint,
     group_collected,
     latest_points,
     page_text,
+    plan_selection,
     records_in_period,
 )
 from .const import (
@@ -102,8 +102,8 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         self.client = client
         self.selected = selected
         self.entry = entry
-        # Poslední výběr, který integrace na web skutečně promítla. Drží se
-        # na disku, aby po restartu nevypadal cizí stav webu jako změna.
+        # Odběry, na kterých se HA a web naposledy shodly. Podle nich se pozná,
+        # jestli změnu udělal uživatel na webu, nebo v nastavení integrace.
         self._store: Store = Store(hass, 1, f"{DOMAIN}_{entry_id}_selection")
         self._applied: set[int] | None = None
         # Naposledy vídané záznamy nástěnky. Drží se na disku, aby po restartu
@@ -111,7 +111,7 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         # a aby se neohlašovaly znovu ty, které už se ohlásily.
         self._seen_store: Store = Store(hass, 1, f"{DOMAIN}_{entry_id}_collected")
         self._seen: list[CollectedItem] | None = None
-        # Otisky vybraných harmonogramů pro přelom roku: {id: "papír|nová"}
+        # Otisky přihlášených harmonogramů pro přelom roku: {id: "papír|nová"}
         self._fingerprints: dict[int, str] = {}
         self.last_success: datetime | None = None
         # Hodnocení stanoviště má 0,7 MB a mění se, jen když přibude svoz.
@@ -143,26 +143,8 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         # tahal zvlášť koordinátor i srovnání odběrů.
         body = await self.client.async_fetch_page()
         schedules = self.client.parse_schedules(body)
-
-        # Přelom roku se řeší dřív než odběry, ať se letošní harmonogram
-        # přihlásí hned a ne až za další interval.
-        if await self._async_follow_year_change(schedules):
-            body = await self.client.async_fetch_page()
-            schedules = self.client.parse_schedules(body)
-
-        odhlasit = await self._async_selection_changed()
-        nove_telo = await self.client.async_apply_selection(
-            self.selected, odhlasit, body
-        )
-
-        if nove_telo is not body:
-            # Něco se přihlásilo nebo odhlásilo, stránka je čerstvá.
-            body = nove_telo
-            schedules = self.client.parse_schedules(body)
+        body, schedules = await self._async_sync_selection(body, schedules)
         email = self.client.parse_default_email(body)
-
-        if odhlasit:
-            await self._async_remember_selection()
 
         if self.client.town is None:
             # Veřejná stránka obce, jeden GET za běh - název do jména zařízení.
@@ -323,104 +305,74 @@ class MojeOdpadkyCoordinator(DataUpdateCoordinator[MojeOdpadkyData]):
         self._heavy_at = dt_now()
         return rating, people
 
-    async def _async_follow_year_change(self, schedules: list[Schedule]) -> bool:
-        """Přenést výběr na letošní harmonogramy, když ty loňské zmizely.
+    async def _async_sync_selection(
+        self, body: str, schedules: list[Schedule]
+    ) -> tuple[str, list[Schedule]]:
+        """Sladit odběry na webu s výběrem v HA; rozhodující je web.
 
-        Obec každý rok vypíše nové harmonogramy s novými ID a staré ze
-        stránky zmizí. Výběr uložený v nastavení by pak ukazoval do prázdna,
-        proto se hledá nástupce podle komodity a místní části.
-        """
-        znama = {item.schedule_id for item in schedules}
-        chybejici = self.selected - znama
-
-        # Otisky se průběžně doplňují, dokud harmonogramy na stránce jsou.
-        pred = dict(self._fingerprints)
-        for item in schedules:
-            if item.schedule_id in self.selected:
-                self._fingerprints[item.schedule_id] = fingerprint(item)
-        if self._fingerprints != pred and self._applied is not None:
-            await self._async_save_state()
-
-        # Stránka bez jediného harmonogramu je spíš chyba čtení než přelom
-        # roku - z výběru se kvůli ní nic vyřazovat nebude.
-        if not chybejici or not znama:
-            return False
-
-        novy_vyber = set(self.selected)
-        prevedeno: dict[int, int] = {}
-        ztraceno: list[int] = []
-
-        for stare in sorted(chybejici):
-            otisk = self._fingerprints.get(stare)
-            nastupce = (
-                find_successor(otisk, schedules, novy_vyber) if otisk else None
-            )
-            novy_vyber.discard(stare)
-            if nastupce is None:
-                ztraceno.append(stare)
-                continue
-            novy_vyber.add(nastupce)
-            prevedeno[stare] = nastupce
-
-        if prevedeno:
-            _LOGGER.info("Přelom roku: harmonogramy převedené na nové %s", prevedeno)
-        if ztraceno:
-            # Harmonogram, který na webu není, už nejde sledovat ani odhlásit.
-            # Ve výběru by jen zůstal viset; obec ho často nahradí jinak
-            # pojmenovaným (papír a plast -> tříděný odpad) a ten web sám
-            # přihlásí, nebo ho jde zaškrtnout v nastavení.
-            _LOGGER.info(
-                "Harmonogramy %s už na webu nejsou a nástupce se nenašel; "
-                "z výběru se vyřazují",
-                ztraceno,
-            )
-
-        self.selected = novy_vyber
-        for stare, nove in prevedeno.items():
-            self._fingerprints[nove] = self._fingerprints.pop(stare)
-        for stare in ztraceno:
-            self._fingerprints.pop(stare, None)
-        # Ať to není vidět jako uživatelova změna - jinak by se odhlašovalo.
-        await self._async_remember_selection()
-
-        if self.entry is not None:
-            self.hass.config_entries.async_update_entry(
-                self.entry,
-                options={
-                    **self.entry.options,
-                    CONF_SCHEDULES: [str(item) for item in sorted(novy_vyber)],
-                },
-            )
-
-        # Nová stránka je potřeba jen tehdy, když se bude přihlašovat nástupce.
-        return bool(prevedeno)
-
-    async def _async_selection_changed(self) -> bool:
-        """Změnil uživatel výběr harmonogramů v Home Assistantu?
-
-        Odhlašuje se jen tehdy. Kdyby se odhlašovalo při každém obnovení,
-        stačí jediný rozejitý stav (ruční změna na webu, nová ID po přelomu
-        roku, čerstvá instalace) a integrace smaže odběr, o který uživatel
-        nepřišel dobrovolně. Tohle se jednou stalo a je to nevratné.
+        Změnu udělanou na webu integrace převezme, změnu z nastavení v HA
+        pošle na web (viz ``plan_selection``). Výsledný výběr je vždycky to,
+        co je na webu opravdu přihlášené, a zapíše se i do nastavení služby.
         """
         if self._applied is None:
             ulozeno = await self._store.async_load()
-            if ulozeno is None:
-                # První běh: co je na webu, to platí. Jen si výběr zapamatuj.
-                await self._async_remember_selection()
-                return False
-            self._applied = {int(item) for item in ulozeno.get("schedules", [])}
-            self._fingerprints = {
-                int(klic): hodnota
-                for klic, hodnota in (ulozeno.get("fingerprints") or {}).items()
-            }
+            if ulozeno is not None:
+                self._applied = {int(item) for item in ulozeno.get("schedules", [])}
+                self._fingerprints = {
+                    int(klic): hodnota
+                    for klic, hodnota in (ulozeno.get("fingerprints") or {}).items()
+                }
 
-        return self.selected != self._applied
+        plan = plan_selection(
+            schedules, self.selected, self._applied, self._fingerprints
+        )
+        if plan is None:
+            return body, schedules
 
-    async def _async_remember_selection(self) -> None:
-        """Zapsat výběr jako promítnutý na web."""
-        self._applied = set(self.selected)
-        await self._async_save_state()
+        if plan.successors:
+            _LOGGER.info(
+                "Přelom roku: harmonogramy převedené na nové %s", plan.successors
+            )
+        if plan.subscribe or plan.unsubscribe:
+            body = await self.client.async_change_subscriptions(
+                plan.subscribe, plan.unsubscribe, body
+            )
+            schedules = self.client.parse_schedules(body)
+
+        na_webu = {item.schedule_id for item in schedules if item.subscribed}
+        if na_webu != self.selected:
+            _LOGGER.debug(
+                "Výběr harmonogramů podle webu: %s (dosud %s)",
+                sorted(na_webu),
+                sorted(self.selected),
+            )
+        self.selected = set(na_webu)
+        otisky = {
+            item.schedule_id: fingerprint(item)
+            for item in schedules
+            if item.schedule_id in na_webu
+        }
+        if self._applied != na_webu or self._fingerprints != otisky:
+            self._applied = set(na_webu)
+            self._fingerprints = otisky
+            await self._async_save_state()
+
+        if self.entry is not None:
+            vyber = sorted(na_webu)
+            ulozeny = sorted(
+                int(item) for item in self.entry.options.get(CONF_SCHEDULES, [])
+            )
+            if ulozeny != vyber:
+                # Koordinátor už s tímhle výběrem běží, takže to reload
+                # nevyvolá (viz async_reload_entry).
+                self.hass.config_entries.async_update_entry(
+                    self.entry,
+                    options={
+                        **self.entry.options,
+                        CONF_SCHEDULES: [str(item) for item in vyber],
+                    },
+                )
+        return body, schedules
 
     async def _async_save_state(self) -> None:
         """Uložit výběr i otisky.

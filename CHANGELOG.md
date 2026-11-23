@@ -1,5 +1,15 @@
 # Změny
 
+## Nevydáno
+
+### Opraveno
+
+- Harmonogram odhlášený přímo na webu integrace při další obnově zase
+  přihlásila, protože výběr v Home Assistantu brala jako hlavní. Teď rozhoduje
+  web: přihlášení i odhlášení na webu integrace převezme do svého výběru a na
+  web posílá jen změny z nastavení integrace. Sama od sebe nikdy nic
+  neodhlásí.
+
 ## 0.1.6 – 2026-10-28
 
 ### Změněno

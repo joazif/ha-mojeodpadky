@@ -29,7 +29,7 @@
   komoditu se stavem **Dnes / Zítra / Za 5 dní**.
 - **Harmonogramy:** přihlášení jménem a heslem, obec se zjistí sama. Seznam
   všech harmonogramů obce jako zaškrtávátka — zaškrtnutí harmonogram na webu
-  přihlásí, odškrtnutí odhlásí.
+  přihlásí, odškrtnutí odhlásí. Změny udělané přímo na webu integrace převezme.
 - **Odevzdaný odpad:** posledních 15 záznamů z nástěnky, počet odevzdání
   každé komodity za MESOH rok i se součtem a událost pro automatizace při
   každém novém záznamu.
@@ -439,20 +439,20 @@ ne každý den znovu.
 
 ## Poznámky
 
-- **Výběr v Home Assistantu platí.** Harmonogram zaškrtnutý v Home Assistantu
-  integrace na webu přihlásí; když ho na webu zrušíš, při další obnově ho
-  přihlásí znovu. Odhlašuje ale jen při změně výběru v Home Assistantu: odběr
-  přidaný na webu nechá být a prázdný výběr ignoruje — aby rozejitý stav nebo
-  chyba v nastavení neodhlásila odběr, o který nikdo nepřišel dobrovolně.
+- **Rozhoduje web.** Co je na webu přihlášené, to integrace sleduje. Když
+  harmonogram přihlásíš nebo odhlásíš přímo na webu, integrace to při další
+  obnově převezme do svého výběru a nic nevrací zpátky. Na web posílá jen to,
+  co změníš v nastavení integrace v HA (zaškrtnutí přihlásí, odškrtnutí
+  odhlásí). Sama od sebe nikdy nic neodhlásí: ani při prvním spuštění, ani
+  při prázdném výběru, ani když se stránka nepodaří přečíst.
 - **Přelom roku:** obec vypíše nové harmonogramy s novými ID a staré zmizí.
-  Web často sám přihlásí odběratele i na nový ročník. Integrace si u
-  vybraných harmonogramů pamatuje komoditu a místní část a výběr převede na
-  letošní obdobu; harmonogram, který zmizel bez nástupce (obec třeba papír
-  a plast nahradí tříděným odpadem), z výběru vyřadí. Přepínače upozornění
-  i senzory komodit se srovnají samy.
+  Web často sám přihlásí odběratele i na nový ročník. Když ne, integrace za
+  zmizelý harmonogram přihlásí letošní se stejnou komoditou a místní částí;
+  harmonogram, který zmizel bez nástupce (obec třeba papír a plast nahradí
+  tříděným odpadem), z výběru vyřadí. Přepínače upozornění i senzory komodit
+  se srovnají samy.
 - **Nastavení ukazuje stav webu.** Ve výběru harmonogramů je zaškrtnuté to,
-  co je na webu opravdu přihlášené (i to, co přihlásil sám web), ne výběr
-  z doby instalace. Odhlásí se jen to, co v něm sám odškrtneš.
+  co je na webu opravdu přihlášené.
 - Po zapnutí e-mailových upozornění se výsledek ověřuje; když server zapne
   upozornění jinde, přepínač to ohlásí jako chybu.
 - **Změněné heslo:** když server uložené heslo odmítne, Home Assistant nabídne

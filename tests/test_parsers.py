@@ -113,26 +113,55 @@ rocniky = _sada("Harmonogram papír 2025", "Harmonogram papír 2026")
 check("stary a novy rocnik jeden otisk",
       _api.fingerprint(rocniky[0]) == _api.fingerprint(rocniky[1]), True)
 
-print("prihlaseni jen existujicich harmonogramu")
-import asyncio  # noqa: E402
+print("sladeni vyberu s webem")
+plan_selection = _api.plan_selection
 
 
-class _Klient(MojeOdpadkyClient):
-    def __init__(self):
-        super().__init__("u", "p", "novalhota", session=object())
-        self.prihlaseno = []
-
-    async def async_subscribe(self, schedule_id, notification=False, email=""):
-        self.prihlaseno.append(schedule_id)
-
-    async def async_fetch_page(self):
-        return BODY
+def _h(sid, name, sub):
+    return Schedule(schedule_id=sid, name=name, subscribed=sub)
 
 
-_klient = _Klient()
-# 8001 je sledovaný, 8007 na webu je, ale nesledovaný, 1234 už na webu není.
-asyncio.run(_klient.async_apply_selection({8001, 8007, 1234}, False, BODY))
-check("prihlasi se jen harmonogram, ktery na webu je", _klient.prihlaseno, [8007])
+def _plan(web, selected, applied, fingerprints=None):
+    p = plan_selection(web, set(selected), None if applied is None else set(applied),
+                       fingerprints or {})
+    return None if p is None else (sorted(p.subscribe), sorted(p.unsubscribe), p.successors)
+
+
+# Mámin případ: na webu odhlášený úterní papír (10), přihlášený středeční (20).
+mama = [_h(10, "Harmonogram papír NOVÁ LHOTA 2026", False),
+        _h(20, "Harmonogram papír OSTATNÍ ČÁSTI 2025", True),
+        _h(30, "Harmonogram směsný odpad 2026", True)]
+check("odhlaseni na webu se prevezme, nic se neprihlasi zpet",
+      _plan(mama, {10, 30}, {10, 30}), ([], [], {}))
+check("prihlaseni na webu se prevezme, nic se neodhlasi",
+      _plan(mama, {30}, {30}), ([], [], {}))
+check("odskrtnuti v HA web odhlasi",
+      _plan(mama, {30}, {20, 30}), ([], [20], {}))
+check("zaskrtnuti v HA web prihlasi",
+      _plan(mama, {10, 20, 30}, {20, 30}), ([10], [], {}))
+check("odhlasuje se jen odskrtnute v HA, ne co pridal web",
+      _plan(mama + [_h(40, "Harmonogram bio NOVÁ LHOTA 2027", True)],
+            {30}, {20, 30}), ([], [20], {}))
+check("prvni beh nic neodhlasi, jen prihlasi vybrane navic",
+      _plan(mama, {10, 30}, None), ([10], [], {}))
+check("prazdny vyber v HA nic neodhlasi",
+      _plan(mama, set(), {20, 30}), ([], [], {}))
+check("stranka bez harmonogramu nic nemeni", _plan([], {30}, {30}), None)
+check("ucet bez jedineho odberu je chyba cteni",
+      _plan([_h(10, "Harmonogram papír 2026", False)], {10}, {10}), None)
+check("neznamy harmonogram z HA se neprihlasuje",
+      _plan(mama, {30, 1234}, {20, 30}), ([], [20], {}))
+
+# Přelom roku: loňský papír (5) z webu zmizel.
+rok = [_h(6, "Harmonogram papír NOVÁ LHOTA 2027", False),
+       _h(30, "Harmonogram směsný odpad 2027", True)]
+check("zmizely harmonogram nahradi letosni se stejnym otiskem",
+      _plan(rok, {5, 30}, {5, 30}, {5: "papír|nová"}), ([6], [], {5: 6}))
+check("nastupce se neprihlasuje, kdyz ho web prihlasil sam",
+      _plan([_h(6, "Harmonogram papír NOVÁ LHOTA 2027", True)] + rok[1:],
+            {5, 30}, {5, 30}, {5: "papír|nová"}), ([], [], {}))
+check("zmizely bez nastupce se tise vyradi",
+      _plan(rok, {7, 30}, {7, 30}, {7: "sklo|"}), ([], [], {}))
 
 print("prelom roku")
 fingerprint = _api.fingerprint

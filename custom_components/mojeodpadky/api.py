@@ -427,6 +427,80 @@ def find_successor(
     return None
 
 
+@dataclass(slots=True)
+class SelectionPlan:
+    """Co s odběry na webu udělat při jednom obnovení."""
+
+    subscribe: set[int]
+    unsubscribe: set[int]
+    # Loňský harmonogram -> letošní, který se za něj přihlásí.
+    successors: dict[int, int]
+
+
+def plan_selection(
+    schedules: list[Schedule],
+    selected: set[int],
+    applied: set[int] | None,
+    fingerprints: dict[int, str],
+) -> SelectionPlan | None:
+    """Sladit výběr v Home Assistantu s odběry na webu.
+
+    Rozhodující je web; výběr v HA se mu přizpůsobí. Kdo co změnil, se pozná
+    podle ``applied`` - stavu, na kterém se HA a web naposledy shodly:
+
+    - co je na webu jinak než v ``applied``, změnil uživatel na webu
+      a jen se to převezme (přihlášení i odhlášení),
+    - co je ve výběru HA jinak než v ``applied``, změnil uživatel v nastavení
+      integrace a pošle se to na web.
+
+    Odhlašuje se jen to, co uživatel odškrtl v HA - nikdy nic jiného. Při
+    prvním běhu (``applied`` je None) se neodhlašuje vůbec, převezme se web
+    a jen se přihlásí, co je ve výběru navíc.
+
+    Harmonogram, který z webu úplně zmizel (přelom roku), se nahradí
+    letošním se stejnou komoditou a místní částí, pokud ho web už nepřihlásil
+    sám. Vrací None, když stránka nevypadá spolehlivě a nemá se nic měnit.
+    """
+    znama = {item.schedule_id for item in schedules}
+    web = {item.schedule_id for item in schedules if item.subscribed}
+    if not znama:
+        return None
+    if applied is None:
+        pridat = selected - web
+        odebrat: set[int] = set()
+    else:
+        if not web and applied:
+            # Účet bez jediného odběru je spíš chyba čtení stránky.
+            return None
+        pridat = selected - applied
+        odebrat = applied - selected
+        if not selected:
+            # Prázdný výběr je skoro jistě chyba nastavení, ne pokyn odhlásit
+            # všechno.
+            odebrat = set()
+
+    nastupci: dict[int, int] = {}
+    zabrane = set(web) | (pridat & znama)
+    for stare in sorted(((applied or set()) | selected) - znama):
+        otisk = fingerprints.get(stare)
+        if not otisk:
+            continue
+        if any(item.subscribed and fingerprint(item) == otisk for item in schedules):
+            continue
+        nove = find_successor(otisk, schedules, zabrane)
+        if nove is not None:
+            nastupci[stare] = nove
+            zabrane.add(nove)
+            pridat.add(nove)
+
+    cil = ((web | pridat) - odebrat) & znama
+    return SelectionPlan(
+        subscribe=cil - web,
+        unsubscribe=web & odebrat,
+        successors=nastupci,
+    )
+
+
 def schedule_waste_type(item: Schedule, events: list[CollectionEvent]) -> str:
     """Komodita harmonogramu tak, jak ji web píše u jeho svozů.
 
@@ -1254,53 +1328,23 @@ class MojeOdpadkyClient:
         digits = re.sub(r"\D", "", match.group(1))
         return int(digits) if digits else None
 
-    async def async_apply_selection(
-        self, wanted: set[int], unsubscribe: bool = False, body: str | None = None
+    async def async_change_subscriptions(
+        self, subscribe: set[int], unsubscribe: set[int], body: str | None = None
     ) -> str:
-        """Dorovnat odběry na serveru podle výběru a vrátit čerstvou stránku.
+        """Přihlásit a odhlásit harmonogramy a vrátit čerstvou stránku.
 
-        Odhlašuje se **jen na výslovné přání** (``unsubscribe=True``).
-        Automatické odhlašování na pozadí už jednou sebralo uživateli odběr,
-        který chtěl - výběr v Home Assistantu umí být rozejitý s webem
-        z mnoha důvodů (ruční změna na webu, přelom roku, nová ID), a smazat
-        kvůli tomu odběr je nevratné.
+        Co přesně se smí změnit, rozhoduje ``plan_selection``; tady se to jen
+        provede.
         """
+        if not (subscribe or unsubscribe):
+            return body if body is not None else await self.async_fetch_page()
         if body is None:
             body = await self.async_fetch_page()
         email = self.parse_default_email(body)
-        harmonogramy = self.parse_schedules(body)
-        current = {s.schedule_id for s in harmonogramy if s.subscribed}
-
-        # Jen harmonogramy, které na webu jsou: loňský ročník bez nástupce
-        # zůstává ve výběru, a bez tohohle by se ho integrace při každém
-        # obnovení pokoušela přihlásit znovu.
-        to_add = (wanted & {s.schedule_id for s in harmonogramy}) - current
-        to_remove = current - wanted
-
-        if not wanted and current:
-            # Prazdny vyber je skoro jiste chyba konfigurace, ne pokyn
-            # odhlasit uzivateli vsechno. Radeji nesaheme na nic.
-            _LOGGER.warning(
-                "Výběr harmonogramů je prázdný, odběry na webu nechávám beze změny"
-            )
-            return body
-
-        for schedule_id in sorted(to_add):
+        for schedule_id in sorted(subscribe):
             _LOGGER.info("Začínám sledovat harmonogram %s", schedule_id)
             await self.async_subscribe(schedule_id, False, email)
-
-        if to_remove and not unsubscribe:
-            _LOGGER.info(
-                "Na webu jsou navíc sledované harmonogramy %s; integrace je "
-                "nechává být, odhlásit je jde na webu mojeodpadky.cz",
-                sorted(to_remove),
-            )
-        elif to_remove:
-            for schedule_id in sorted(to_remove):
-                _LOGGER.info("Přestávám sledovat harmonogram %s", schedule_id)
-                await self.async_unsubscribe(schedule_id)
-
-        if not to_add and not (to_remove and unsubscribe):
-            return body
-
+        for schedule_id in sorted(unsubscribe):
+            _LOGGER.info("Přestávám sledovat harmonogram %s", schedule_id)
+            await self.async_unsubscribe(schedule_id)
         return await self.async_fetch_page()

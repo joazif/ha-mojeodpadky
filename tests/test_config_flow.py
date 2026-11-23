@@ -144,9 +144,10 @@ async def test_coordinator_unexpected_parse_error_is_update_failed(hass):
     entry = _entry()
     entry.add_to_hass(hass)
     client = MojeOdpadkyClient(**UCET)
-    coordinator = MojeOdpadkyCoordinator(hass, client, {8001}, 6, entry.entry_id, entry)
+    # 8002 není na webu přihlášený -> integrace ho zkusí přihlásit a web selže.
+    coordinator = MojeOdpadkyCoordinator(hass, client, {8001, 8002}, 6, entry.entry_id, entry)
     with patch(f"{API}.async_fetch_page", AsyncMock(return_value=KALENDAR)), patch(
-        f"{API}.async_apply_selection", AsyncMock(side_effect=MojeOdpadkyError("x"))
+        f"{API}.async_change_subscriptions", AsyncMock(side_effect=MojeOdpadkyError("x"))
     ):
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()

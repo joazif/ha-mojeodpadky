@@ -39,18 +39,31 @@ def _f(n):
 KAL, NAST, HOD, INV = _f("fixture_kalendar.html"), _f("fixture_nastenka.html"), _f("fixture_hodnoceni.html"), _f("fixture_inventura.html")
 
 
+# Na webu (fixture kalendáře) jsou přihlášené tyhle harmonogramy.
+NA_WEBU = ["8001", "8004", "8005", "8006"]
+
+
 @pytest.fixture
 def web():
-    async def apply(self, wanted, unsubscribe=False, body=None):
-        return body
+    """Web podle uložených stránek; přihlašování a odhlašování se jen zaznamená."""
+    zmeny = AsyncMock(return_value=KAL)
     with patch(f"{API}.async_fetch_page", AsyncMock(return_value=KAL)), \
-         patch(f"{API}.async_apply_selection", apply), \
+         patch(f"{API}.async_change_subscriptions", zmeny), \
          patch(f"{API}.async_fetch_town", AsyncMock(return_value="Nová Lhota")), \
          patch(f"{API}.async_fetch_collected", AsyncMock(return_value=NAST)), \
          patch(f"{API}.async_fetch_rating", AsyncMock(return_value=HOD)), \
          patch(f"{API}.async_fetch_inventory", AsyncMock(return_value=INV)), \
          patch(f"{API}.async_fetch_records_since", AsyncMock(return_value=[])):
-        yield
+        yield zmeny
+
+
+def _ulozeny_stav(hass_storage, entry, schedules):
+    """Stav, na kterém se HA a web naposledy shodly (jako po předchozím běhu)."""
+    klic = f"{DOMAIN}_{entry.entry_id}_selection"
+    hass_storage[klic] = {
+        "version": 1, "minor_version": 1, "key": klic,
+        "data": {"schedules": sorted(int(x) for x in schedules), "fingerprints": {}},
+    }
 
 
 def _entry():
@@ -84,17 +97,19 @@ async def test_reload_only_on_real_change(hass, web):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    # Výběr se srovnal podle webu.
+    assert entry.options["schedules"] == NA_WEBU
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
         # Stejný výběr jinak seřazený a změna dat (reauth) -> bez reloadu.
         hass.config_entries.async_update_entry(
-            entry, options={"schedules": ["8002", "8001"], "scan_interval_hours": 6}
+            entry, options={"schedules": list(reversed(NA_WEBU)), "scan_interval_hours": 6}
         )
         hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_PASSWORD: "nove"})
         await hass.async_block_till_done()
         assert reload.await_count == 0
         # Jiný interval -> reload.
         hass.config_entries.async_update_entry(
-            entry, options={"schedules": ["8001", "8002"], "scan_interval_hours": 24}
+            entry, options={"schedules": NA_WEBU, "scan_interval_hours": 24}
         )
         await hass.async_block_till_done()
         assert reload.await_count == 1
@@ -103,18 +118,22 @@ async def test_reload_only_on_real_change(hass, web):
 
 
 async def test_options_flow_loaded(hass, web):
+    """Odškrtnutí v nastavení harmonogramy na webu odhlásí."""
     entry = _entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    web.reset_mock()
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["step_id"] == "init"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"schedules": ["8001"], "scan_interval_hours": "24"}
     )
     await hass.async_block_till_done()
-    assert entry.options == {"schedules": ["8001"], "scan_interval_hours": 24}
     assert entry.state is ConfigEntryState.LOADED
+    assert entry.options["scan_interval_hours"] == 24
+    prihlasit, odhlasit = web.await_args.args[:2]
+    assert (prihlasit, odhlasit) == (set(), {8004, 8005, 8006})
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 
@@ -312,24 +331,91 @@ async def test_options_show_what_is_subscribed_on_web(hass, web):
     await hass.async_block_till_done()
 
 
-async def test_vanished_schedule_dropped_from_selection(hass, web, caplog):
+async def test_vanished_schedule_dropped_from_selection(hass, web, hass_storage, caplog):
     """Harmonogram, který z webu zmizel bez nástupce, se tiše vyřadí."""
     entry = _entry()
     entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
-        entry, options={"schedules": ["8001", "1234"], "scan_interval_hours": 6}
+        entry, options={"schedules": NA_WEBU + ["1234"], "scan_interval_hours": 6}
     )
+    _ulozeny_stav(hass_storage, entry, NA_WEBU + ["1234"])
     with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        assert entry.options["schedules"] == ["8001"]
-        assert entry.runtime_data.selected == {8001}
-        # Druhá obnova už nic nehlásí.
+        assert entry.options["schedules"] == NA_WEBU
+        assert web.await_count == 0
         caplog.clear()
         await entry.runtime_data.async_refresh()
         await hass.async_block_till_done()
-        assert "nástupce se nenašel" not in caplog.text
         assert reload.await_count == 0
     assert not [r for r in caplog.records if r.levelname == "WARNING" and "mojeodpadky" in r.name]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_web_unsubscribe_is_adopted(hass, web, hass_storage):
+    """Odhlášení na webu se převezme, nic se nepřihlásí zpátky (mámin případ)."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    # Minule bylo přihlášené i 8003; na webu ho uživatel odhlásil.
+    drive = NA_WEBU + ["8003"]
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": drive, "scan_interval_hours": 6}
+    )
+    _ulozeny_stav(hass_storage, entry, drive)
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert web.await_count == 0
+        assert entry.options["schedules"] == NA_WEBU
+        assert entry.runtime_data.selected == {int(x) for x in NA_WEBU}
+        assert reload.await_count == 0
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_web_subscribe_is_adopted(hass, web, hass_storage):
+    """Přihlášení na webu se převezme a nic se neodhlásí."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": ["8001"], "scan_interval_hours": 6}
+    )
+    _ulozeny_stav(hass_storage, entry, ["8001"])
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert web.await_count == 0
+    assert entry.options["schedules"] == NA_WEBU
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_ha_check_subscribes(hass, web, hass_storage):
+    """Zaškrtnutí v HA se pošle na web."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": NA_WEBU + ["8002"], "scan_interval_hours": 6}
+    )
+    _ulozeny_stav(hass_storage, entry, NA_WEBU)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    prihlasit, odhlasit = web.await_args.args[:2]
+    assert (prihlasit, odhlasit) == ({8002}, set())
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_first_run_never_unsubscribes(hass, web):
+    """Čerstvá instalace (bez uloženého stavu) nic neodhlásí."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"schedules": ["8001"], "scan_interval_hours": 6}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert web.await_count == 0
+    assert entry.options["schedules"] == NA_WEBU
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

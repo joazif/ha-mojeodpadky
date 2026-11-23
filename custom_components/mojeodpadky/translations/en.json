@@ -11,7 +11,7 @@
       },
       "schedules": {
         "title": "Choose schedules",
-        "description": "Municipality: {obec}\n\nSelected schedules will be followed on the website for you. Unchecking one unsubscribes it.",
+        "description": "Municipality: {obec}\n\nChecked schedules are the ones currently subscribed on the website. Checking one subscribes it there. To unsubscribe, use the integration's settings later or the website itself – the integration picks up changes made on the website.",
         "data": {
           "schedules": "Schedules",
           "scan_interval_hours": "How often to refresh data"
