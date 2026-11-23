@@ -1,6 +1,6 @@
 # Změny
 
-## Nevydáno
+## 0.1.7 – 2026-11-23
 
 ### Opraveno
 
