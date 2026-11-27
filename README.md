@@ -12,7 +12,7 @@
 <p align="center">
   <img alt="Verze" src="https://img.shields.io/github/v/release/joazif/ha-mojeodpadky?style=flat-square&color=4c8b2b&label=verze">
   <img alt="Stažení" src="https://img.shields.io/github/downloads/joazif/ha-mojeodpadky/total?style=flat-square&color=4c8b2b&label=sta%C5%BEen%C3%AD">
-  <img alt="HACS" src="https://img.shields.io/badge/HACS-integrace-4c8b2b?style=flat-square">
+  <img alt="Marketplace" src="https://img.shields.io/badge/Marketplace-integrace-4c8b2b?style=flat-square">
   <img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.11%2B-4c8b2b?style=flat-square">
 </p>
 
@@ -44,20 +44,20 @@
 
 ## Instalace
 
-### HACS (doporučeno)
+### Marketplace (doporučeno)
 
-1. Otevři HACS, vyhledej **Moje odpadky** a klikni **Download**
+Home Assistant 2026.11 a novější má HACS vestavěný jako **Marketplace**.
+
+1. **Nastavení → Marketplace**, vyhledej **Moje odpadky** a klikni **Instalovat**
 2. Restartuj Home Assistant
 3. **Nastavení → Zařízení a služby → Přidat integraci → Moje odpadky**
 
-[![Otevřít v HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
+[![Otevřít v Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
 [![Přidat integraci](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=mojeodpadky)
 
-Když ji HACS ve vyhledávání nenajde, přidej ji jako vlastní repozitář:
-
-1. HACS → ⋮ → **Custom repositories**
-2. Repozitář `https://github.com/joazif/ha-mojeodpadky`, kategorie **Integration**
-3. Pak pokračuj krokem 1 výše
+Na Home Assistantu 2026.10 a starším je postup stejný, jen místo
+Marketplace otevřeš **HACS** a klikneš **Download**. Tlačítko výše otevře
+Marketplace i HACS podle verze.
 
 ### Ručně
 
@@ -214,7 +214,7 @@ uvidíš to po kliknutí na počet.
 Komodity, souhrny a poplatek v jedné kartě. Komodity se do ní doplňují samy
 a řadí se podle nejbližšího svozu, takže kartu není potřeba upravovat, když
 obec komoditu přidá, přejmenuje nebo přestane svážet (třeba papír a plast
-zvlášť nahradí společný svoz „Papír, Plast“). Potřebuje z HACS kartu
+zvlášť nahradí společný svoz „Papír, Plast“). Potřebuje z Marketplace (dříve HACS) kartu
 [auto-entities](https://github.com/thomasloven/lovelace-auto-entities).
 
 ```yaml
@@ -258,7 +258,7 @@ obyčejný seznam: tlačítko ruční aktualizace se přidá jako
 
 ## Karta: co jsem odevzdal
 
-Dlaždice s ikonou a barvou podle komodity. Potřebuje z HACS dvě karty:
+Dlaždice s ikonou a barvou podle komodity. Potřebuje z Marketplace (dříve HACS) dvě karty:
 [Mushroom](https://github.com/piitaya/lovelace-mushroom)
 a [auto-entities](https://github.com/thomasloven/lovelace-auto-entities).
 
