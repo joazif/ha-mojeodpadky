@@ -46,18 +46,14 @@
 
 ### Marketplace (doporučeno)
 
-Home Assistant 2026.11 a novější má HACS vestavěný jako **Marketplace**.
+1. **Nastavení → Marketplace** (na Home Assistantu 2026.10 a starším **HACS**), vyhledej **Moje odpadky** a klikni **Instalovat**
 
-1. **Nastavení → Marketplace**, vyhledej **Moje odpadky** a klikni **Instalovat**
+   [![Otevřít v Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
+
 2. Restartuj Home Assistant
 3. **Nastavení → Zařízení a služby → Přidat integraci → Moje odpadky**
 
-[![Otevřít v Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joazif&repository=ha-mojeodpadky&category=integration)
-[![Přidat integraci](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=mojeodpadky)
-
-Na Home Assistantu 2026.10 a starším je postup stejný, jen místo
-Marketplace otevřeš **HACS** a klikneš **Download**. Tlačítko výše otevře
-Marketplace i HACS podle verze.
+   [![Přidat integraci](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=mojeodpadky)
 
 ### Ručně
 
